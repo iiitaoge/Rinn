@@ -1,0 +1,31 @@
+# --- C++ & CMake 构建垃圾 ---
+build/
+out/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+*.cmake
+Makefile
+
+# --- Visual Studio & VS Code 临时文件 ---
+.vs/
+.vscode/
+*.sln
+*.suo
+*.user
+*.ipch
+*.iobj
+*.tlog
+
+# --- 编译产物 (二进制) ---
+*.exe
+*.dll
+*.lib
+*.pdb
+*.obj
+*.a
+*.o
+
+# --- 系统垃圾 ---
+.DS_Store
+Thumbs.db
