@@ -1,10 +1,9 @@
 #include"raylib.h"
 #include<vector>
 class GameObject {
-protected:
+public:
 	float x = 0, y = 0;
 	bool active = true;
-public:
 	// 虚函数：多态
 	virtual void Update(float dt) = 0;
 	virtual void Draw() = 0;
@@ -40,7 +39,9 @@ public:
 		RandomizeDirection();
 	}
 
-	void Update(float dt) override{
+	void Update(float dt) override {
+		if (!active) return; // 已“删除”的敌人不再处理
+
 		changeTimer += dt;
 		if (changeTimer >= changeInterval) {
 			changeTimer = 0.0f;
@@ -50,30 +51,14 @@ public:
 		x += velocity.x * dt;
 		y += velocity.y * dt;
 
-		// 边界反弹
-		HandleBoundary();
-	}
-	// 边界反弹
-	void HandleBoundary() {
-		const float radius = 20.0f;
-		const int screenW = GetScreenWidth();
-		const int screenH = GetScreenHeight();
+		// 边界删除：圆心 + 半径判断（你的半径是 20）
+		const float r = 20.0f;
+		const float sw = (float)GetScreenWidth();
+		const float sh = (float)GetScreenHeight();
 
-		if (x < radius) {
-			x = radius;
-			velocity.x *= -1;
-		}
-		if (x > screenW - radius) {
-			x = screenW - radius;
-			velocity.x *= -1;
-		}
-		if (y < radius) {
-			y = radius;
-			velocity.y *= -1;
-		}
-		if (y > screenH - radius) {
-			y = screenH - radius;
-			velocity.y *= -1;
+		// 完全离开屏幕后才“删除”（更自然）
+		if (x + r < 0 || x - r > sw || y + r < 0 || y - r > sh) {
+			active = false;
 		}
 	}
 
@@ -98,7 +83,7 @@ int main(){
 
 	std::vector<GameObject*> objects;
 	objects.push_back(new Player);
-	for (int i = 0; i < 100000; ++i) {
+	for (int i = 0; i < 10; ++i) {
 		float x = (float)GetRandomValue(0, GetScreenWidth());
 		float y = (float)GetRandomValue(0, GetScreenHeight());
 		objects.push_back(new Enemy(x, y));
@@ -111,6 +96,20 @@ int main(){
 
 		float dt = GetFrameTime();
 		for (auto obj : objects) obj->Update(dt);
+		// --- 这是一个陷阱 ---
+		// 试图清理死掉的对象
+		for (auto it = objects.begin(); it != objects.end(); ++it) {
+			GameObject* obj = *it;
+			if (!obj->active) {
+				// 1. 释放内存 (这一步是安全的)
+				delete obj;
+
+				// 2. 从数组移除 (这一步是致命的！！！)
+				// 你的迭代器 'it' 在这一瞬间失效了。
+				// 但你的 for 循环头部的 '++it' 马上就要执行。
+				objects.erase(it);
+			}
+		}
 		BeginDrawing();
 		ClearBackground(RAYWHITE);
 		for (auto obj : objects) obj->Draw();
