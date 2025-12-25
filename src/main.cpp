@@ -1,56 +1,121 @@
 #include"raylib.h"
 #include<vector>
-
-// 数据导向
-struct Player {
-	float x, y;
-	float speed;
-	int color; // 0xRRGGBBAA
+class GameObject {
+protected:
+	float x = 0, y = 0;
+	bool active = true;
+public:
+	// 虚函数：多态
+	virtual void Update(float dt) = 0;
+	virtual void Draw() = 0;
+	virtual ~GameObject() {}
 };
 
-// 接受一个 Player 的引用，这样才能修改它
-void InputSystem(Player& player) {
-	// 你的任务：
-	// 1. 检测 IsKeyDown(KEY_W) -> y 减小
-	// 2. 检测 IsKeyDown(KEY_S) -> y 增加
-	// ... A 和 D 同理
+class Player : public GameObject {
+public:
 
-	// 注意：一定要乘 GetFrameTime()
-	// 否则方块在 144Hz 显示器上会比 60Hz 快两倍。
-	float dt = GetFrameTime();
-	if (IsKeyDown(KEY_W)) player.y -= player.speed * dt;
-	// ... 继续写完
-	if (IsKeyDown(KEY_S)) player.y += player.speed * dt;
-	if (IsKeyDown(KEY_A)) player.x -= player.speed * dt;
-	if (IsKeyDown(KEY_D)) player.x += player.speed * dt;
-}
+	float speed = 200.0f;
+	void Update(float dt) override {
+		// 键盘控制逻辑...
+		if (IsKeyDown(KEY_W)) y -= speed * dt;
+		if (IsKeyDown(KEY_S)) y += speed * dt;
+		if (IsKeyDown(KEY_A)) x -= speed * dt;
+		if (IsKeyDown(KEY_D)) x += speed * dt;
+	}
+	void Draw() override {
+		DrawRectangle(x, y, 40, 40, BLUE);
+	}
+};
 
-// 注意这里用了 const，因为渲染不应该修改数据
-void RenderSystem(const Player& player) {
-	DrawRectangle(
-		(int)player.x,
-		(int)player.y,
-		50, 50, // 宽 50 高 50
-		RED
-	);
-}
+class Enemy : public GameObject {
+public:
+	Vector2 velocity;        // 当前速度向量
+	float speed = 120.0f;    // 标量速度
+	float changeTimer = 0.0f;
+	float changeInterval = 2.0f; // 每 2 秒换一次方向
+
+	Enemy(float px, float py) {
+		x = px;
+		y = py;
+		RandomizeDirection();
+	}
+
+	void Update(float dt) override{
+		changeTimer += dt;
+		if (changeTimer >= changeInterval) {
+			changeTimer = 0.0f;
+			RandomizeDirection();
+		}
+
+		x += velocity.x * dt;
+		y += velocity.y * dt;
+
+		// 边界反弹
+		HandleBoundary();
+	}
+	// 边界反弹
+	void HandleBoundary() {
+		const float radius = 20.0f;
+		const int screenW = GetScreenWidth();
+		const int screenH = GetScreenHeight();
+
+		if (x < radius) {
+			x = radius;
+			velocity.x *= -1;
+		}
+		if (x > screenW - radius) {
+			x = screenW - radius;
+			velocity.x *= -1;
+		}
+		if (y < radius) {
+			y = radius;
+			velocity.y *= -1;
+		}
+		if (y > screenH - radius) {
+			y = screenH - radius;
+			velocity.y *= -1;
+		}
+	}
+
+
+	void Draw() override{
+		DrawCircle((int)x, (int)y, 20, RED);
+	}
+
+private:
+	void RandomizeDirection() {
+		float angle = GetRandomValue(0, 360) * DEG2RAD;
+		velocity.x = cosf(angle) * speed;
+		velocity.y = sinf(angle) * speed;
+	}
+
+};
 
 int main(){
-	InitWindow(1600, 800, "Rinn"); // 初始化窗口
+
+	InitWindow(2000, 1200, "Rinn"); // 初始化窗口
 	SetTargetFPS(60); // 帧率
 
-	// 1. 初始化实体 (Entity Creation)
-	Player myPlayer = { 400.0f, 300.0f, 200.0f, 0xFF0000FF }; // 位置 400,300，速度 200
+	std::vector<GameObject*> objects;
+	objects.push_back(new Player);
+	for (int i = 0; i < 100000; ++i) {
+		float x = (float)GetRandomValue(0, GetScreenWidth());
+		float y = (float)GetRandomValue(0, GetScreenHeight());
+		objects.push_back(new Enemy(x, y));
+	}
+
+
+
 
 	while (!WindowShouldClose()) {
 
-		InputSystem(myPlayer);
-
+		float dt = GetFrameTime();
+		for (auto obj : objects) obj->Update(dt);
 		BeginDrawing();
 		ClearBackground(RAYWHITE);
+		for (auto obj : objects) obj->Draw();
 		DrawFPS(10, 10);
 
-		RenderSystem(myPlayer);
 		EndDrawing();
 	}
 	CloseWindow();
