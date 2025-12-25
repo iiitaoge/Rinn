@@ -19,7 +19,7 @@ message(STATUS "正在配置依赖：Raylib... (这可能需要几分钟)")
 
 FetchContent_Declare(
     raylib
-    GIT_REPOSITORY https://github.com/raysan5/raylib.git
+    GIT_REPOSITORY https://gitee.com/mirrors/raylib.git
     GIT_TAG        5.5  # 锁定版本 5.5
 )
 
