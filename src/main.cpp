@@ -1,122 +1,54 @@
-#include"raylib.h"
-#include<vector>
-class GameObject {
-public:
-	float x = 0, y = 0;
-	bool active = true;
-	// 虚函数：多态
-	virtual void Update(float dt) = 0;
-	virtual void Draw() = 0;
-	virtual ~GameObject() {}
-};
+#include <iostream>
+#include "core/SparseSet.hpp"
+#include "components/Components.hpp"
 
-class Player : public GameObject {
-public:
+// 方便打印调试
+void print_dense(Rinn::SparseSet<Transform>& set) {
+    std::cout << "Dense Array Content:\n";
+    for (auto& t : set) { // 测试你的迭代器
+        std::cout << "[Addr: " << &t << "] Val: (" << t.x << ", " << t.y << ")\n";
+    }
+    std::cout << "-----------------------\n";
+}
 
-	float speed = 200.0f;
-	void Update(float dt) override {
-		// 键盘控制逻辑...
-		if (IsKeyDown(KEY_W)) y -= speed * dt;
-		if (IsKeyDown(KEY_S)) y += speed * dt;
-		if (IsKeyDown(KEY_A)) x -= speed * dt;
-		if (IsKeyDown(KEY_D)) x += speed * dt;
-	}
-	void Draw() override {
-		DrawRectangle(x, y, 40, 40, BLUE);
-	}
-};
+int main() {
+    // 1. 初始化
+    Rinn::SparseSet<Transform> positions(100);
 
-class Enemy : public GameObject {
-public:
-	Vector2 velocity;        // 当前速度向量
-	float speed = 120.0f;    // 标量速度
-	float changeTimer = 0.0f;
-	float changeInterval = 2.0f; // 每 2 秒换一次方向
+    // 2. 添加测试 (乱序添加)
+    std::cout << ">>> Adding Entities 10, 50, 3...\n";
+    positions.add(10, { 10.0f, 10.0f });
+    positions.add(50, { 50.0f, 50.0f });
+    positions.add(3, { 3.0f,  3.0f });
 
-	Enemy(float px, float py) {
-		x = px;
-		y = py;
-		RandomizeDirection();
-	}
+    // 3. 验证内存连续性
+    // 预期：三个地址应该紧挨着，相差 8 字节 (2个float)
+    print_dense(positions);
 
-	void Update(float dt) override {
-		if (!active) return; // 已“删除”的敌人不再处理
+    // 4. 获取测试
+    if (positions.has(50)) {
+        Transform& t = positions.get(50);
+        std::cout << "Entity 50 Position: " << t.x << "\n";
+    }
 
-		changeTimer += dt;
-		if (changeTimer >= changeInterval) {
-			changeTimer = 0.0f;
-			RandomizeDirection();
-		}
+    // 5. 删除测试 (Swap & Pop)
+    std::cout << "\n>>> Removing Entity 10 (First element)...\n";
+    positions.remove(10);
+    // 预期：Entity 3 的数据应该被搬到了 Entity 10 原来的位置
 
-		x += velocity.x * dt;
-		y += velocity.y * dt;
+    print_dense(positions);
 
-		// 边界删除：圆心 + 半径判断（你的半径是 20）
-		const float r = 20.0f;
-		const float sw = (float)GetScreenWidth();
-		const float sh = (float)GetScreenHeight();
+    // 6. 验证反向索引是否修好了
+    if (positions.has(3)) {
+        std::cout << "Entity 3 is still alive.\n";
+    }
+    else {
+        std::cout << "ERROR: Entity 3 vanished!\n";
+    }
 
-		// 完全离开屏幕后才“删除”（更自然）
-		if (x + r < 0 || x - r > sw || y + r < 0 || y - r > sh) {
-			active = false;
-		}
-	}
+    if (!positions.has(10)) {
+        std::cout << "Entity 10 is correctly removed.\n";
+    }
 
-
-	void Draw() override{
-		DrawCircle((int)x, (int)y, 20, RED);
-	}
-
-private:
-	void RandomizeDirection() {
-		float angle = GetRandomValue(0, 360) * DEG2RAD;
-		velocity.x = cosf(angle) * speed;
-		velocity.y = sinf(angle) * speed;
-	}
-
-};
-
-int main(){
-
-	InitWindow(2000, 1200, "Rinn"); // 初始化窗口
-	SetTargetFPS(60); // 帧率
-
-	std::vector<GameObject*> objects;
-	objects.push_back(new Player);
-	for (int i = 0; i < 10; ++i) {
-		float x = (float)GetRandomValue(0, GetScreenWidth());
-		float y = (float)GetRandomValue(0, GetScreenHeight());
-		objects.push_back(new Enemy(x, y));
-	}
-
-
-
-
-	while (!WindowShouldClose()) {
-
-		float dt = GetFrameTime();
-		for (auto obj : objects) obj->Update(dt);
-		// --- 这是一个陷阱 ---
-		// 试图清理死掉的对象
-		for (auto it = objects.begin(); it != objects.end(); ++it) {
-			GameObject* obj = *it;
-			if (!obj->active) {
-				// 1. 释放内存 (这一步是安全的)
-				delete obj;
-
-				// 2. 从数组移除 (这一步是致命的！！！)
-				// 你的迭代器 'it' 在这一瞬间失效了。
-				// 但你的 for 循环头部的 '++it' 马上就要执行。
-				objects.erase(it);
-			}
-		}
-		BeginDrawing();
-		ClearBackground(RAYWHITE);
-		for (auto obj : objects) obj->Draw();
-		DrawFPS(10, 10);
-
-		EndDrawing();
-	}
-	CloseWindow();
-	return 0;
+    return 0;
 }
