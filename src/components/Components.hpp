@@ -1,5 +1,5 @@
 #pragma once
-// 这是一个纯数据结构 (POD)
+// 杩欐槸涓�涓函鏁版嵁缁撴瀯 (POD)
 struct Transform {
     float x, y;
 };

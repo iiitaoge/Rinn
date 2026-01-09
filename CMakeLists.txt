@@ -1,44 +1,89 @@
 cmake_minimum_required(VERSION 3.28)
 
-# 1. 项目身份证
+# ============================================================================
+# PROJECT RINN: CMake Configuration
+# ============================================================================
+
+# 1. Project Declaration
 project(Project_Rinn 
     VERSION 0.1.0 
     LANGUAGES CXX C
 )
 
-# 2. 锁定技术栈：C++ 20
+# 2. C++ Standard Configuration - C++20 Strict
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# 关闭编译器扩展（防止 MSVC 偷偷塞私货，保证跨平台）
-set(CMAKE_CXX_EXTENSIONS OFF) 
+set(CMAKE_CXX_EXTENSIONS OFF)  # Disable compiler-specific extensions for cross-platform compatibility
 
-# 3. 依赖管理：自动拉取 Raylib
+# 3. FetchContent Configuration for Raylib
 include(FetchContent)
 
-message(STATUS "正在配置依赖：Raylib... (这可能需要几分钟)")
+message(STATUS "Fetching Raylib dependency... (This may take a while on first run)")
 
 FetchContent_Declare(
     raylib
     GIT_REPOSITORY https://gitee.com/mirrors/raylib.git
-    GIT_TAG        5.5  # 锁定版本 5.5
+    GIT_TAG        5.5  # Raylib version 5.5
 )
 
-# 这一行是为了防止 Raylib 编译它自带的那几十个示例程序，浪费我们时间
+# Disable examples to prevent dozens of warnings during build
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE) 
 
-# 开始下载并加载 Raylib
+# Fetch and make Raylib available
 FetchContent_MakeAvailable(raylib)
 
-# 4. 引擎核心
-# 告诉 CMake，源码在哪里
+# 4. Executable Target
+# Add all source files to the executable
 add_executable(${PROJECT_NAME}
+    # Main entry point
+    src/main.cpp
+    
+    # Core ECS Components
+    src/Core/ComponentID.hpp
+    src/Core/Registry.hpp
+    src/Core/SparseSet.hpp
+    src/Core/Types.hpp
+    
+    # Game Components
+    src/components/Components.hpp
+)
+
+# 5. Link Libraries
+# Link Raylib functionality to the executable
+target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
+
+# 6. Source Group Organization for Visual Studio
+# Organize files in VS Solution Explorer into logical groups
+source_group("Source Files\\Core" FILES
+    src/Core/ComponentID.hpp
+    src/Core/Registry.hpp
+    src/Core/SparseSet.hpp
+    src/Core/Types.hpp
+)
+
+source_group("Source Files\\Components" FILES
+    src/components/Components.hpp
+)
+
+source_group("Source Files" FILES
     src/main.cpp
 )
 
-# 5. 链接库
-# 把 Raylib 的功能“注入” exe 里
-target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
+# Organize documentation files into "AI_Mentor" virtual folder
+source_group("AI_Mentor\\Context" FILES
+    docs/context/context_ecs.txt
+    docs/context/context_raylib.txt
+    docs/context/context_rllm.txt
+    docs/context/context_sol2.txt
+)
 
-# 6. 资源拷贝 (为以后做准备)
-# 每次编译，自动把 assets 文件夹复制到 exe 旁边
-file(COPY ${CMAKE_SOURCE_DIR}/assets DESTINATION ${CMAKE_BINARY_DIR})
+source_group("AI_Mentor" FILES
+    docs/progress.md
+    docs/PROJECT_MANIFEST.md
+)
+
+# 7. Asset Copy (for future use)
+# Automatically copy assets folder to executable directory on each build
+if(EXISTS ${CMAKE_SOURCE_DIR}/assets)
+    file(COPY ${CMAKE_SOURCE_DIR}/assets DESTINATION ${CMAKE_BINARY_DIR})
+endif()

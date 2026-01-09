@@ -1,0 +1,10 @@
+.vs/
+out/
+build/
+bin/
+.git/
+*.exe
+*.dll
+*.pdb
+*.suo
+*.user

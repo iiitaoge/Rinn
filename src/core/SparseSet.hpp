@@ -8,12 +8,12 @@ namespace Rinn{
 	public:
 		virtual ~ISparseSet() = default;
 
-		// ¹¹Ôìº¯Êı£ºÏŞÖÆSparse´óĞ¡Îª100000£¬³õÊ¼»¯Îª NULL_ENTITY
+		// æ„é€ å‡½æ•°ï¼šé™åˆ¶Sparseå¤§å°ä¸º100000ï¼Œåˆå§‹åŒ–ä¸º NULL_ENTITY
 		ISparseSet(size_t max_entities = 100000) {
 			Sparse.resize(max_entities, NULL_ENTITY);
 		}
 
-		// ¼ì²é¸ÃÊµÌåÊÇ·ñÓĞ¶ÔÓ¦×é¼ş
+		// æ£€æŸ¥è¯¥å®ä½“æ˜¯å¦æœ‰å¯¹åº”ç»„ä»¶
 		bool has(Entity entity) const {
 			return entity < Sparse.size() && Sparse[entity] != NULL_ENTITY;
 		}
@@ -25,23 +25,23 @@ namespace Rinn{
 		std::vector<Entity_index> Sparse;
 	};
 
-	// ¾ßÌå×é¼şÀàÊµÏÖ
+	// å…·ä½“ç»„ä»¶ç±»å®ç°
 	template<typename T>
 	class SparseSet : public ISparseSet {
 	private:
 		std::vector<T> Dense;
-		std::vector<Entity_index> dense_to_entity;	// ×é¼ş¶ÔÓ¦ÊµÌå£¬ÓÃÓÚdense·´Ïò¶¨Î»sparse
+		std::vector<Entity_index> dense_to_entity;	// ç»„ä»¶å¯¹åº”å®ä½“ï¼Œç”¨äºdenseåå‘å®šä½sparse
 	public:
 		using ISparseSet::ISparseSet;
-		// ¸øÊµÌå¹Ò×é¼ş
+		// ç»™å®ä½“æŒ‚ç»„ä»¶
 		void add(Entity entity, T component) {
 			if (entity >= Sparse.size()) {
-				// Èç¹û entity ID Ì«´ó£¬¾²Ä¬À©Èİ
+				// å¦‚æœ entity ID å¤ªå¤§ï¼Œé™é»˜æ‰©å®¹
 				Sparse.resize(entity + 1, NULL_ENTITY);
 			}
 			if (Sparse[entity] != NULL_ENTITY)
 				return;
-			// Ô­×Ó²Ù×÷£º¸üĞÂ Dense ºÍ dense_to_entity
+			// åŸå­æ“ä½œï¼šæ›´æ–° Dense å’Œ dense_to_entity
 			Dense.push_back(component);
 			dense_to_entity.push_back(entity);
 			Sparse[entity] = (Entity_index)(Dense.size() - 1);
@@ -52,41 +52,41 @@ namespace Rinn{
 			return Dense[Sparse[entity]];
 		}
 
-		// dense_to_entityºÍDense±ØĞë±£³ÖÒ»ÖÂĞÔ£ºÒ»ÖÂĞ´£¬Ò»ÖÂÉ¾
+		// dense_to_entityå’ŒDenseå¿…é¡»ä¿æŒä¸€è‡´æ€§ï¼šä¸€è‡´å†™ï¼Œä¸€è‡´åˆ 
 		void remove(Entity entity) {
 			if (entity >= Sparse.size() || Sparse[entity] == NULL_ENTITY) {
-				return; // »òÕß assert(false);
+				return; // æˆ–è€… assert(false);
 			}
-			Entity_index index_deleted = Sparse[entity];		// ±»É¾³ıÊµÌåÔÚDenseÖĞµÄË÷Òı
-			Entity_index index_last = Dense.size() - 1;		// ¶ÓÎ²Ë÷Òı
-			Entity entity_last = dense_to_entity[index_last];	//¶ÓÎ²ÊµÌåºÅ
+			Entity_index index_deleted = Sparse[entity];		// è¢«åˆ é™¤å®ä½“åœ¨Denseä¸­çš„ç´¢å¼•
+			Entity_index index_last = Dense.size() - 1;		// é˜Ÿå°¾ç´¢å¼•
+			Entity entity_last = dense_to_entity[index_last];	//é˜Ÿå°¾å®ä½“å·
 
-			// Î¬»¤³íÃÜÊı×é Dense
+			// ç»´æŠ¤ç¨ å¯†æ•°ç»„ Dense
 			Dense[index_deleted] = Dense[index_last];
 			Dense.pop_back();
 
-			// Î¬»¤Ï¡ÊèÊı×é Sparse
+			// ç»´æŠ¤ç¨€ç–æ•°ç»„ Sparse
 			Sparse[entity_last] = index_deleted;
 			Sparse[entity] = NULL_ENTITY;
 
-			// Î¬»¤dense_to_entity
+			// ç»´æŠ¤dense_to_entity
 			dense_to_entity[index_deleted] = entity_last;
 			dense_to_entity.pop_back();
 		}
 
-		// ÖØÖÃ 
+		// é‡ç½® 
 		void clear() override {
 			Dense.clear();
 			dense_to_entity.clear();
 			std::fill(Sparse.begin(), Sparse.end(), NULL_ENTITY);
 		}
 
-		// ×é¼şÊı
+		// ç»„ä»¶æ•°
 		size_t size() const override {
 			return Dense.size();
 		}
 
-		// ÎªSystem×¼±¸µÄµü´úÆ÷ 
+		// ä¸ºSystemå‡†å¤‡çš„è¿­ä»£å™¨ 
 		auto begin() { return Dense.begin(); }
 		auto end() { return Dense.end(); }
 		auto begin() const { return Dense.begin(); }

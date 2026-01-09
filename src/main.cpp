@@ -1,44 +1,45 @@
 #include <iostream>
-#include "core/SparseSet.hpp"
+#include "Core/SparseSet.hpp"
 #include "components/Components.hpp"
+#include "Core/Registry.hpp"
 
-// ·½±ã´òÓ¡µ÷ÊÔ
+// ï¿½ï¿½ï¿½ï¿½ï¿½Ó¡ï¿½ï¿½ï¿½ï¿½
 void print_dense(Rinn::SparseSet<Transform>& set) {
     std::cout << "Dense Array Content:\n";
-    for (auto& t : set) { // ²âÊÔÄãµÄµü´úÆ÷
+    for (auto& t : set) { // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Äµï¿½ï¿½ï¿½ï¿½ï¿½
         std::cout << "[Addr: " << &t << "] Val: (" << t.x << ", " << t.y << ")\n";
     }
     std::cout << "-----------------------\n";
 }
 
 int main() {
-    // 1. ³õÊ¼»¯
+    // 1. ï¿½ï¿½Ê¼ï¿½ï¿½
     Rinn::SparseSet<Transform> positions(100);
 
-    // 2. Ìí¼Ó²âÊÔ (ÂÒÐòÌí¼Ó)
+    // 2. ï¿½ï¿½ï¿½Ó²ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½)
     std::cout << ">>> Adding Entities 10, 50, 3...\n";
     positions.add(10, { 10.0f, 10.0f });
     positions.add(50, { 50.0f, 50.0f });
     positions.add(3, { 3.0f,  3.0f });
 
-    // 3. ÑéÖ¤ÄÚ´æÁ¬ÐøÐÔ
-    // Ô¤ÆÚ£ºÈý¸öµØÖ·Ó¦¸Ã½ô°¤×Å£¬Ïà²î 8 ×Ö½Ú (2¸öfloat)
+    // 3. ï¿½ï¿½Ö¤ï¿½Ú´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+    // Ô¤ï¿½Ú£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö·Ó¦ï¿½Ã½ï¿½ï¿½ï¿½ï¿½Å£ï¿½ï¿½ï¿½ï¿½ 8 ï¿½Ö½ï¿½ (2ï¿½ï¿½float)
     print_dense(positions);
 
-    // 4. »ñÈ¡²âÊÔ
+    // 4. ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½
     if (positions.has(50)) {
         Transform& t = positions.get(50);
         std::cout << "Entity 50 Position: " << t.x << "\n";
     }
 
-    // 5. É¾³ý²âÊÔ (Swap & Pop)
+    // 5. É¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ (Swap & Pop)
     std::cout << "\n>>> Removing Entity 10 (First element)...\n";
     positions.remove(10);
-    // Ô¤ÆÚ£ºEntity 3 µÄÊý¾ÝÓ¦¸Ã±»°áµ½ÁË Entity 10 Ô­À´µÄÎ»ÖÃ
+    // Ô¤ï¿½Ú£ï¿½Entity 3 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½Ã±ï¿½ï¿½áµ½ï¿½ï¿½ Entity 10 Ô­ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½
 
     print_dense(positions);
 
-    // 6. ÑéÖ¤·´ÏòË÷ÒýÊÇ·ñÐÞºÃÁË
+    // 6. ï¿½ï¿½Ö¤ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç·ï¿½ï¿½Þºï¿½ï¿½ï¿½
     if (positions.has(3)) {
         std::cout << "Entity 3 is still alive.\n";
     }

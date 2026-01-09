@@ -1,23 +1,62 @@
-# --- C++ & CMake ¹¹½¨À¬»ø ---
+# ============================================================================
+# PROJECT RINN: Git Ignore Rules
+# ============================================================================
+
+# --- C++ & CMake æ„å»ºåƒåœ¾ ---
 build/
 out/
 cmake-build-*/
 CMakeFiles/
 CMakeCache.txt
 *.cmake
+!CMakeLists.txt
+!**/CMakeLists.txt
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
 Makefile
+.ninja_deps
+.ninja_log
+build.ninja
 
-# --- Visual Studio & VS Code ÁÙÊ±ÎÄ¼ş ---
+# --- Visual Studio & VS Code & cursorä¸´æ—¶æ–‡ä»¶ ---
 .vs/
 .vscode/
 *.sln
+*.slnx
 *.suo
 *.user
+*.userosscache
+*.sdf
+*.opensdf
+*.db
+*.db-shm
+*.db-wal
+*.opendb
+*.VC.db
+*.VC.opendb
+*.sqlite
 *.ipch
 *.iobj
 *.tlog
+*.aps
+*.ncb
+*.opt
+*.plg
+*.rc2
+*.res
+*.pch
+*.vspscc
+*_i.c
+*_p.c
+*.ilk
+*.meta
+*.swp
+*.swo
 
-# --- ±àÒë²úÎï (¶ş½øÖÆ) ---
+
+# --- ç¼–è¯‘äº§ç‰© (äºŒè¿›åˆ¶) ---
 *.exe
 *.dll
 *.lib
@@ -25,7 +64,23 @@ Makefile
 *.obj
 *.a
 *.o
+*.ilk
 
-# --- ÏµÍ³À¬»ø ---
+# --- ä¾èµ–å’Œå¤–éƒ¨åº“ ---
+_deps/
+
+# --- æµ‹è¯•å’Œä¸´æ—¶æ–‡ä»¶ ---
+Testing/
+[Tt]emp/
+[Tt]mp/
+*~
+
+# --- å¤‡ä»½æ–‡ä»¶ ---
+*.bak
+*.backup
+*.old
+
+# --- ç³»ç»Ÿåƒåœ¾ ---
 .DS_Store
 Thumbs.db
+desktop.ini

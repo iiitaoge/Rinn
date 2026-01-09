@@ -1,20 +1,26 @@
 #pragma once
 #include<cstdint>
 #include <limits>
-#include <bitset> // <--- ±ØĞë¼ÓÕâ¸ö
+#include <bitset> // <--- å¿…é¡»åŠ è¿™ä¸ª
 
-//¶¨ÒåÊµÌå
-typedef uint32_t Entity;
-typedef uint32_t Entity_index;
+// 1. å®šä¹‰å®ä½“ ID
+using Entity = std::uint32_t;
 
-// ÊµÌåÊıÁ¿ÉÏÏŞ £¨²»ÒªÓÃÈ«¾Ö±äÁ¿£©
+// 2. å®šä¹‰å®ä½“ç´¢å¼•
+using Entity_index = std::uint32_t;
+
+
+// 2. æ— æ•ˆå®ä½“å· (Modern C++ å†™æ³•ï¼Œæ›¿ä»£ #define)
+// max() é€šå¸¸æ˜¯ 0xFFFFFFFF
+constexpr Entity NULL_ENTITY = std::numeric_limits<Entity>::max();
+
+// 3. ç»„ä»¶ ID ç±»å‹
+using Component_ID = std::uint8_t; // 64ä¸ªç»„ä»¶ç”¨ uint8 å°±å¤Ÿäº†(0-255)ï¼Œçœå†…å­˜
+
+// 4. æ•°é‡é™åˆ¶
 constexpr Entity MAX_ENTITIES = 100000;
+constexpr Component_ID MAX_COMPONENTS = 64;
 
-// ÎŞĞ§ÊµÌåºÅ
-#define NULL_ENTITY  0xFFFFFFFF
-
-// ×é¼ş×î´óÊıÁ¿ (¼ÙÉè 32 ÖÖ)
-constexpr uint8_t MAX_COMPONENTS = 32;
-
-// Ã¿Ò»¸öÊµÌå¶¼ÓĞÒ»´®¶ş½øÖÆÎ»£¬±íÊ¾ËüÓµÓĞÄÄĞ©×é¼ş
+// 5. ç­¾å (Signature)
+// std::bitset<64> å ç”¨ 8 å­—èŠ‚ï¼Œéå¸¸ç´§å‡‘
 using Signature = std::bitset<MAX_COMPONENTS>;
