@@ -87,3 +87,24 @@ source_group("AI_Mentor" FILES
 if(EXISTS ${CMAKE_SOURCE_DIR}/assets)
     file(COPY ${CMAKE_SOURCE_DIR}/assets DESTINATION ${CMAKE_BINARY_DIR})
 endif()
+
+# ============================================================================
+# 分析师优化: 针对 Project_Rinn 开启魔鬼级编译检查
+# ============================================================================
+if(MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE
+        /W4             # 警告等级 4 (高强度检查)
+        /WX             # ⚠️ 警告视为错误 (强制你修复所有警告)
+        /permissive-    # 禁用非标准行为 (强制 C++ 标准一致性)
+        
+        # 额外推荐：防止中文乱码和逻辑错误
+        /utf-8          # 源码使用 UTF-8 (解决中文注释可能导致的编译报错)
+        /w14189         # 警告：局部变量已初始化但未引用
+    )
+    
+    # 在 VS 的代码分析器中开启所有规则
+    set_target_properties(${PROJECT_NAME} PROPERTIES 
+        VS_GLOBAL_EnableMicrosoftCodeAnalysis "true"
+        VS_GLOBAL_CodeAnalysisRuleSet "AllRules.ruleset"
+    )
+endif()
