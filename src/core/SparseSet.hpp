@@ -2,8 +2,10 @@
 #include"Types.hpp"
 #include<vector>
 #include<cassert>
+#include <utility>  // 包含 std::forward
+#include <concepts> // 确保构造的时候参数合法，能够造出 T
 
-namespace Rinn{
+namespace Rinn {
 	class ISparseSet {
 	public:
 		virtual ~ISparseSet() = default;
@@ -33,21 +35,34 @@ namespace Rinn{
 		std::vector<Entity_index> dense_to_entity;	// 组件对应实体，用于dense反向定位sparse
 	public:
 		using ISparseSet::ISparseSet;
-		// 给实体挂组件
-		void add(Entity entity, T component) {
-			if (entity >= Sparse.size()) {
-				// 如果 entity ID 太大，静默扩容
-				Sparse.resize(entity + 1, NULL_ENTITY);
-			}
+		// 给实体挂组件--原地构造
+		template<typename... Args>
+		// 核心约束在这里：
+		requires std::constructible_from<T, Args...>
+		T& emplace(Entity entity, Args&&... args) {
+
+			assert(entity < MAX_ENTITIES && "Entity out of range!");
+
 			if (Sparse[entity] != NULL_ENTITY)
-				return;
-			// 原子操作：更新 Dense 和 dense_to_entity
-			Dense.push_back(component);
+				return Dense[Sparse[entity]];
+			
+			// 原地构造
+			Dense.emplace_back(std::forward<Args>(args)...);	
+			
+
+			//  同步稀疏集映射
 			dense_to_entity.push_back(entity);
 			Sparse[entity] = (Entity_index)(Dense.size() - 1);
+
+			return Dense.back();
 		}
 
 		T& get(Entity entity) {
+			assert(has(entity) && "Entity does not have this component!");
+			return Dense[Sparse[entity]];
+		}
+		// 只读get
+		const T& get(Entity entity) const {
 			assert(has(entity) && "Entity does not have this component!");
 			return Dense[Sparse[entity]];
 		}
@@ -76,9 +91,11 @@ namespace Rinn{
 
 		// 重置 
 		void clear() override {
+			for (Entity i : dense_to_entity) {		// 从 O(Capacity) 降维到了 O(Size)
+				Sparse[i] = NULL_ENTITY;
+			}
 			Dense.clear();
 			dense_to_entity.clear();
-			std::fill(Sparse.begin(), Sparse.end(), NULL_ENTITY);
 		}
 
 		// 组件数

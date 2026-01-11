@@ -2,6 +2,7 @@
 #include<cstdint>
 #include <limits>
 #include <bitset> // <--- 必须加这个
+#include <algorithm>	// 实现 fill
 
 // 1. 定义实体 ID
 using Entity = std::uint32_t;

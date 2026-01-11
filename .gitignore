@@ -1,12 +1,23 @@
 # ============================================================================
-# PROJECT RINN: Git Ignore Rules
+# PROJECT RINN: Git Ignore Rules (Source Code & Config Only)
 # ============================================================================
 
-# --- C++ & CMake 构建垃圾 ---
+# --- Build Output & Directories ---
+docs/
 build/
 out/
+bin/
+lib/
+docs/
 cmake-build-*/
+_deps/
+x64/
+x86/
+Debug/
+Release/
 CMakeFiles/
+
+# --- CMake Generated Files ---
 CMakeCache.txt
 *.cmake
 !CMakeLists.txt
@@ -20,9 +31,9 @@ Makefile
 .ninja_log
 build.ninja
 
-# --- Visual Studio & VS Code & cursor临时文件 ---
+# --- IDE & Editor Configuration (User Specific) ---
+# Visual Studio
 .vs/
-.vscode/
 *.sln
 *.slnx
 *.suo
@@ -36,27 +47,21 @@ build.ninja
 *.opendb
 *.VC.db
 *.VC.opendb
-*.sqlite
 *.ipch
 *.iobj
 *.tlog
-*.aps
-*.ncb
-*.opt
-*.plg
-*.rc2
-*.res
-*.pch
-*.vspscc
-*_i.c
-*_p.c
-*.ilk
-*.meta
-*.swp
-*.swo
+CMakeSettings.json.user
 
+# VS Code
+.vscode/
 
-# --- 编译产物 (二进制) ---
+# Obsidian (Keep config, ignore local workspace state)
+.obsidian/workspace.json
+.obsidian/cache
+.obsidian/plugins/
+.obsidian/themes/
+
+# --- Binary & Intermediate Files ---
 *.exe
 *.dll
 *.lib
@@ -65,22 +70,22 @@ build.ninja
 *.a
 *.o
 *.ilk
+*.exp
+*.map
+*.rsrc
+*.res
 
-# --- 依赖和外部库 ---
-_deps/
-
-# --- 测试和临时文件 ---
-Testing/
-[Tt]emp/
-[Tt]mp/
-*~
-
-# --- 备份文件 ---
-*.bak
-*.backup
-*.old
-
-# --- 系统垃圾 ---
+# --- System Files ---
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# --- Temp Files ---
+Testing/
+[Tt]emp/
+[Tt]mp/
+*.bak
+*.old
+*.swp
+*.swo
+*~

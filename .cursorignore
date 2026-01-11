@@ -1,10 +1,41 @@
-.vs/
-out/
+# Ignore build directories
 build/
+out/
 bin/
-.git/
-*.exe
-*.dll
-*.pdb
+lib/
+cmake-build-*/
+_deps/
+x64/
+x86/
+Debug/
+Release/
+CMakeFiles/
+
+# Ignore IDE files
+.vs/
+.vscode/
+.obsidian/
+*.sln
 *.suo
 *.user
+*.db
+*.ipch
+
+# Ignore binary files
+*.exe
+*.dll
+*.lib
+*.pdb
+*.obj
+*.a
+*.o
+*.ilk
+*.exp
+*.map
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+# Ignore git internals
+.git/

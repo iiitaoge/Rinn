@@ -5,7 +5,6 @@
 #include <vector>
 #include <optional>		// 为了实现 “空返回”
 #include <bit>			// 为了实现快速  实体销毁组件
-#include <algorithm>	// 实现 fill
 namespace Rinn {
 	class Registry {
 	private:
@@ -59,7 +58,7 @@ namespace Rinn {
 			Component_ID id = get_component_type_id<T>();	//获取组件id（在签名中的位数）
 			assert(id < MAX_COMPONENTS && "Component ID out of MAX");
 			entity_signatures[entity].set(id);		//签名层面挂起
-			get_pool<T>().add(entity, component);	//SparseSet层面挂起
+			get_pool<T>().emplace(entity, component);	//SparseSet层面挂起
 		}
 		// 方案A：双版本设计（推荐）
 		// 快速路径：用于 System 遍历（保证存在）
