@@ -10,18 +10,19 @@ namespace Rinn {
 	public:
 		virtual ~ISparseSet() = default;
 
-		// 构造函数：限制Sparse大小为100000，初始化为 NULL_ENTITY
-		ISparseSet(size_t max_entities = 100000) {
-			Sparse.resize(max_entities, NULL_ENTITY);
+		// 构造函数：限制Sparse大小为MAX_ENTITIES，初始化为 NULL_COMPONENT_ENTITY
+		ISparseSet(size_t MAX_ENTITIES) {
+			Sparse.resize(MAX_ENTITIES, NULL_COMPONENT_ENTITY);
 		}
 
 		// 检查该实体是否有对应组件
-		bool has(Entity entity) const {
-			return entity < Sparse.size() && Sparse[entity] != NULL_ENTITY;
+		bool has(Entity entity) const noexcept {
+			assert(!entity.is_null() && "Entity invalid");
+			return entity.index() < MAX_ENTITIES && Sparse[entity.index()] != NULL_COMPONENT_ENTITY;
 		}
 		virtual void remove(Entity entity) = 0;
 		virtual void clear() = 0;
-		virtual size_t size() const = 0;
+		virtual size_t size() const noexcept = 0;
 
 	protected:
 		std::vector<Entity_index> Sparse;
@@ -34,6 +35,12 @@ namespace Rinn {
 		std::vector<T> Dense;
 		std::vector<Entity_index> dense_to_entity;	// 组件对应实体，用于dense反向定位sparse
 	public:
+
+		// 兼容性：暴露迭代器类型，允许 std::sort 等算法工作
+		using iterator = typename std::vector<T>::iterator;
+		using const_iterator = typename std::vector<T>::const_iterator;
+		using value_type = T;
+
 		using ISparseSet::ISparseSet;
 		// 给实体挂组件--原地构造
 		template<typename... Args>
@@ -41,48 +48,72 @@ namespace Rinn {
 		requires std::constructible_from<T, Args...>
 		T& emplace(Entity entity, Args&&... args) {
 
-			assert(entity < MAX_ENTITIES && "Entity out of range!");
+			assert(entity.index() < MAX_ENTITIES && "Entity out of range!");
 
-			if (Sparse[entity] != NULL_ENTITY)
-				return Dense[Sparse[entity]];
+			if (Sparse[entity.index()] != NULL_COMPONENT_ENTITY)
+				return Dense[Sparse[entity.index()]];
 			
+
+			// 安全：异常安全 
+			// 先确保 capacity 足够，防止 push_back 过程中抛出异常导致数据不一致
+			// 注意：这是一种简化的异常安全处理，更严格的需要 try-catch 回滚
+			// 一起扩容，一起成功
+			if (Dense.size() == Dense.capacity()) {
+				size_t new_cap = std::max<size_t>(Dense.capacity() * 2, 8);
+				Dense.reserve(new_cap);
+				dense_to_entity.reserve(new_cap);
+			}
+
+
 			// 原地构造
 			Dense.emplace_back(std::forward<Args>(args)...);	
 			
 
 			//  同步稀疏集映射
-			dense_to_entity.push_back(entity);
-			Sparse[entity] = (Entity_index)(Dense.size() - 1);
+			dense_to_entity.push_back(entity.index());
+			Sparse[entity.index()] = static_cast<Entity_index>(Dense.size() - 1);
 
 			return Dense.back();
 		}
 
 		T& get(Entity entity) {
 			assert(has(entity) && "Entity does not have this component!");
-			return Dense[Sparse[entity]];
+			return Dense[Sparse[entity.index()]];
 		}
 		// 只读get
 		const T& get(Entity entity) const {
 			assert(has(entity) && "Entity does not have this component!");
-			return Dense[Sparse[entity]];
+			return Dense[Sparse[entity.index()]];
 		}
 
 		// dense_to_entity和Dense必须保持一致性：一致写，一致删
-		void remove(Entity entity) {
-			if (entity >= Sparse.size() || Sparse[entity] == NULL_ENTITY) {
+		void remove(Entity entity) override{
+			if (entity.index() >= MAX_ENTITIES || Sparse[entity.index()] == NULL_COMPONENT_ENTITY) {
 				return; // 或者 assert(false);
 			}
-			Entity_index index_deleted = Sparse[entity];		// 被删除实体在Dense中的索引
-			Entity_index index_last = Dense.size() - 1;		// 队尾索引
-			Entity entity_last = dense_to_entity[index_last];	//队尾实体号
+			Entity_index index_deleted = Sparse[entity.index()];		// 被删除实体在Dense中的索引
+			Entity_index index_last = static_cast<Entity_index>(Dense.size() - 1);		// 队尾索引
+
+
+			// 如果删除的就是最后一个，直接 pop
+			if (index_deleted == index_last) {
+				Dense.pop_back();
+				dense_to_entity.pop_back();
+				Sparse[entity.index()] = NULL_COMPONENT_ENTITY;
+				return;
+			}
+
+
+
+			Entity_index entity_last = dense_to_entity[index_last];	//队尾实体号
 
 			// 维护稠密数组 Dense
-			Dense[index_deleted] = Dense[index_last];
+			Dense[index_deleted] = std::move(Dense[index_last]);
 			Dense.pop_back();
 
 			// 维护稀疏数组 Sparse
 			Sparse[entity_last] = index_deleted;
-			Sparse[entity] = NULL_ENTITY;
+			Sparse[entity.index()] = NULL_COMPONENT_ENTITY;
 
 			// 维护dense_to_entity
 			dense_to_entity[index_deleted] = entity_last;
@@ -91,22 +122,25 @@ namespace Rinn {
 
 		// 重置 
 		void clear() override {
-			for (Entity i : dense_to_entity) {		// 从 O(Capacity) 降维到了 O(Size)
-				Sparse[i] = NULL_ENTITY;
+			for (Entity_index i : dense_to_entity) {		// 从 O(Capacity) 降维到了 O(Size)
+				Sparse[i] = NULL_COMPONENT_ENTITY;
 			}
 			Dense.clear();
 			dense_to_entity.clear();
 		}
 
 		// 组件数
-		size_t size() const override {
+		size_t size() const noexcept override {
 			return Dense.size();
 		}
 
 		// 为System准备的迭代器 
-		auto begin() { return Dense.begin(); }
-		auto end() { return Dense.end(); }
-		auto begin() const { return Dense.begin(); }
-		auto end() const { return Dense.end(); }
+		//  兼容性：完整的迭代器支持
+		iterator begin() noexcept { return Dense.begin(); }
+		iterator end() noexcept { return Dense.end(); }
+		const_iterator begin() const noexcept { return Dense.begin(); }
+		const_iterator end() const noexcept { return Dense.end(); }
+		const_iterator cbegin() const noexcept { return Dense.cbegin(); }
+		const_iterator cend() const noexcept { return Dense.cend(); }
 	};
 }

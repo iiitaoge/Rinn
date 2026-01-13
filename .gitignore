@@ -3,12 +3,12 @@
 # ============================================================================
 
 # --- Build Output & Directories ---
-docs/
+
 build/
 out/
 bin/
 lib/
-docs/
+
 cmake-build-*/
 _deps/
 x64/
@@ -60,6 +60,17 @@ CMakeSettings.json.user
 .obsidian/cache
 .obsidian/plugins/
 .obsidian/themes/
+
+# cursor
+
+.cursorignore
+.cursorrules
+
+# windsurf
+
+.windsurfrules
+
+
 
 # --- Binary & Intermediate Files ---
 *.exe

@@ -8,10 +8,8 @@
 namespace Rinn {
 	class Registry {
 	private:
-		// 实体计数
-		Entity entity_count = 0;
 		// 活跃实体计数
-		size_t alive_entity_count = 0;
+		Entity_index alive_entity_count = 0;
 		//实体签名，
 		std::vector<Signature> entity_signatures;
 		// 内存更安全，销毁自动释放内存
@@ -38,15 +36,15 @@ namespace Rinn {
 		{
 		}
 		// 创建实体
-		Entity create_entity() {
-			assert(entity_count < MAX_ENTITIES && "Entity out of range!");
-			++alive_entity_count;
-			return entity_count++;
+		Entity create_entity(Entity_index index, Entity_generation gen) {
+			assert(alive_entity_count < MAX_ENTITIES && "Entity out of range!");
+			Entity(index, gen);
+
 		}
 		// 是否有实体
 		template<typename T>
 		bool has(Entity entity) const {
-			assert(entity < entity_count && entity < MAX_ENTITIES && "Entity out of count!");		//实体数量不可超过最大值
+			assert(entity < alive_entity_count && entity < MAX_ENTITIES && "Entity out of count!");		//实体数量不可超过最大值
 			Component_ID id = get_component_type_id<T>();
 			return entity_signatures[entity][id];
 
@@ -54,7 +52,7 @@ namespace Rinn {
 		// 给实体挂起组件
 		template<typename T>
 		void emplace(Entity entity, T component) {
-			assert(entity < entity_count && entity < MAX_ENTITIES && "Entity out of count");
+			assert(entity < alive_entity_count && entity < MAX_ENTITIES && "Entity out of count");
 			Component_ID id = get_component_type_id<T>();	//获取组件id（在签名中的位数）
 			assert(id < MAX_COMPONENTS && "Component ID out of MAX");
 			entity_signatures[entity].set(id);		//签名层面挂起
@@ -73,7 +71,7 @@ namespace Rinn {
 		std::optional<std::reference_wrapper<T>> try_get(Entity entity) {
 
 			// 先检查 entity 有效性（Release 模式也需要）
-			if (entity >= entity_count || entity >= MAX_ENTITIES) {
+			if (entity >= alive_entity_count || entity >= MAX_ENTITIES) {
 				return std::nullopt;
 			}
 			if (has<T>(entity)) {
@@ -84,7 +82,7 @@ namespace Rinn {
 		// 移除指定实体指定组件
 		template<typename T>
 		void remove(Entity entity) {
-			assert(entity < entity_count && entity < MAX_ENTITIES && "Entity out of count");
+			assert(entity < alive_entity_count && entity < MAX_ENTITIES && "Entity out of count");
 			Component_ID id = get_component_type_id<T>();
 			entity_signatures[entity].reset(id);		// 移除后 置0
 			get_pool<T>().remove(entity);
@@ -92,9 +90,9 @@ namespace Rinn {
 
 		// 销毁实体
 		void destroy_entity(Entity entity) {
-			assert(entity < entity_count && entity < MAX_ENTITIES && "Entity out of range!");
+			assert(entity.index() < alive_entity_count && entity.index() < MAX_ENTITIES && "Entity out of range!");
 
-			Signature& sig = entity_signatures[entity];
+			Signature& sig = entity_signatures[entity.index()];
 
 			// 方案A：使用 to_ullong() + 溢出检查
 			if constexpr (MAX_COMPONENTS <= 64) {
@@ -144,7 +142,6 @@ namespace Rinn {
 			std::fill(entity_signatures.begin(), entity_signatures.end(), Signature{});
 
 			// 3. 重置实体计数
-			entity_count = 0;
 			alive_entity_count = 0;
 
 			// 注意：Components_Pool 结构保留（64个指针，可能为nullptr）
