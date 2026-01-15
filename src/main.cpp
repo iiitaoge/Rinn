@@ -178,6 +178,124 @@ int main() {
     std::cout << "Stale handle remains invalid after reuse. PASS.\n";
 
     // --------------------------------------------------------------------
+    // Test Case 5: 组件移除后，View 不再命中该实体
+    // --------------------------------------------------------------------
+    print_separator("Test Case 5: Component Removal");
+
+    // 当前存活: entities[0], entities[1], entities[3], entities[4], new_entity
+    // (entities[2] 已在 Case 3 销毁)
+    
+    // 给 new_entity 挂上组件，让它也能被 View 命中
+    (void)registry.emplace<Transform>(new_entity, 100.0f, 100.0f);
+    (void)registry.emplace<RigidBody>(new_entity, 5.0f, 5.0f);
+
+    // 验证 new_entity 现在能被 View 命中
+    {
+        int pre_remove_count = 0;
+        View<Transform, RigidBody> view_pre(registry);
+        for ([[maybe_unused]] Entity e : view_pre) {
+            ++pre_remove_count;
+        }
+        std::cout << std::format("Before removal: View hits {} entities\n", pre_remove_count);
+    }
+
+    // 移除 entities[0] 的 RigidBody 组件（但不销毁实体）
+    std::cout << std::format("Removing RigidBody from Entity[0] (idx={})...\n", entities[0].index());
+    registry.remove<RigidBody>(entities[0]);
+
+    // 验证：entities[0] 仍然存活
+    if (!registry.is_alive(entities[0])) {
+        std::cerr << "ERROR: Entity[0] should still be alive after component removal!\n";
+        return 1;
+    }
+
+    // 验证：entities[0] 仍有 Transform
+    if (!registry.has<Transform>(entities[0])) {
+        std::cerr << "ERROR: Entity[0] should still have Transform!\n";
+        return 1;
+    }
+
+    // 验证：entities[0] 没有 RigidBody
+    if (registry.has<RigidBody>(entities[0])) {
+        std::cerr << "ERROR: Entity[0] should NOT have RigidBody after removal!\n";
+        return 1;
+    }
+
+    // 验证：View<Transform, RigidBody> 不再命中 entities[0]
+    {
+        int post_remove_count = 0;
+        bool found_entity_0 = false;
+        View<Transform, RigidBody> view_post(registry);
+        
+        for (Entity e : view_post) {
+            if (e.index() == entities[0].index()) {
+                found_entity_0 = true;
+            }
+            ++post_remove_count;
+        }
+
+        std::cout << std::format("After removal: View hits {} entities\n", post_remove_count);
+
+        if (found_entity_0) {
+            std::cerr << "ERROR: Entity[0] should NOT be in View after RigidBody removal!\n";
+            return 1;
+        }
+    }
+
+    std::cout << "Test Case 5 PASSED.\n";
+
+    // --------------------------------------------------------------------
+    // Test Case 6: 只有部分组件的实体，不被多组件 View 命中
+    // --------------------------------------------------------------------
+    print_separator("Test Case 6: Signature Filtering");
+
+    // 创建一个只有 Transform 的实体
+    Entity partial_entity = registry.create_entity();
+    (void)registry.emplace<Transform>(partial_entity, 999.0f, 999.0f);
+    // 故意不挂 RigidBody
+
+    std::cout << std::format("Created partial_entity (idx={}) with ONLY Transform\n", 
+        partial_entity.index());
+
+    // 验证：View<Transform> 应该命中它
+    {
+        bool found_in_transform_view = false;
+        View<Transform> view_t(registry);
+        for (Entity e : view_t) {
+            if (e.index() == partial_entity.index()) {
+                found_in_transform_view = true;
+                break;
+            }
+        }
+
+        if (!found_in_transform_view) {
+            std::cerr << "ERROR: partial_entity should be in View<Transform>!\n";
+            return 1;
+        }
+        std::cout << "partial_entity found in View<Transform>. PASS.\n";
+    }
+
+    // 验证：View<Transform, RigidBody> 不应该命中它
+    {
+        bool found_in_dual_view = false;
+        View<Transform, RigidBody> view_tr(registry);
+        for (Entity e : view_tr) {
+            if (e.index() == partial_entity.index()) {
+                found_in_dual_view = true;
+                break;
+            }
+        }
+
+        if (found_in_dual_view) {
+            std::cerr << "ERROR: partial_entity should NOT be in View<Transform, RigidBody>!\n";
+            return 1;
+        }
+        std::cout << "partial_entity NOT in View<Transform, RigidBody>. PASS.\n";
+    }
+
+    std::cout << "Test Case 6 PASSED.\n";
+
+    // --------------------------------------------------------------------
     // Summary
     // --------------------------------------------------------------------
     print_separator("ALL TEST CASES PASSED");
