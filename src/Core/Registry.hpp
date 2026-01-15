@@ -2,95 +2,198 @@
 #include "Types.hpp"
 #include "SparseSet.hpp"
 #include "ComponentID.hpp"
-#include <vector>
-#include <optional>		// 为了实现 “空返回”
-#include <bit>			// 为了实现快速  实体销毁组件
+
 namespace Rinn {
+
+	// 需要确保Registry在堆或者静态区
+	class EntityPool {
+	private:
+		// 1. 物理常量 (编译期计算)
+		static constexpr uint16_t CAPACITY = MAX_ENTITIES;
+		static constexpr uint16_t MASK = CAPACITY - 1;
+
+		// 验证实体数是否为 2 的幂
+		static_assert((CAPACITY& (CAPACITY - 1)) == 0,
+			"CAPACITY must be power of 2 for MASK to work!");
+
+		// 2. 核心数据 (全部 Inline，无堆分配)
+		// 32KB 的 Ring Buffer + 32KB 的 Generation 数组
+		// 这一坨 64KB 的数据紧密排列，对 L1/L2 Cache 极度友好
+		std::array<Entity_generation, CAPACITY> generations;	// 版本数组
+		std::array<Entity_index, CAPACITY> ring_buffer;			// 存放尸体的环形缓冲区
+
+		// 3. 游标 (使用 uint16 足够，节省寄存器宽度)
+		uint16_t head = 0;
+		uint16_t tail = 0;
+
+		// 4. 水位线
+		Entity_index next_idx = 0;				// 尸体用完了，分配新索引
+		uint16_t alive_entity_count = 0;		// 活跃实体数
+
+	public:
+		// 构造函数：零开销 (Array 不初始化就是垃圾值，但这正是我们要的)
+		// Generation 建议初始化为 0 (可以使用 fill，或者依赖全局静态区的零初始化)
+		EntityPool() {
+			generations.fill(0);
+		}
+
+		[[nodiscard]] bool has_recycled_ids() const noexcept {
+			return head != tail;
+		}
+
+		// 获取实体
+		[[nodiscard]] Entity acquire() noexcept {
+			Entity_index idx;
+
+			// 分支预测优化：通常游戏初期主要走 else (开荒)，后期主要走 if (复用)
+			if (head != tail) {
+				// 1. 复用逻辑
+				idx = ring_buffer[head];
+				head = (head + 1) & MASK; // 极速位运算
+			}
+			else {
+				// 2. 开荒逻辑
+				assert(next_idx < CAPACITY && "Entity pool exhausted!");
+				idx = next_idx++;
+			}
+
+			++alive_entity_count;
+
+			// 组合 Handle (值返回)
+			return Entity(idx, generations[idx]);
+		}
+
+		// 该实体索引进入尸体缓冲区 等待复用
+		void release(Entity_index idx) noexcept {
+			// 安全检查：只有活着的才能死 (防止 Double Free)
+			// 这一步非常重要，防止逻辑层 Bug 污染底层池
+			// assert(is_valid_index(idx)); 
+
+			// 1. 版本号自增 (核心安全)
+			generations[idx]++;
+
+			// 2. 入队
+			ring_buffer[tail] = idx;
+			tail = (tail + 1) & MASK; // 极速位运算
+
+			--alive_entity_count;
+		}
+
+		// 检查 Handle 是否有效 (Gatekeeper)
+		[[nodiscard]] bool is_valid(Entity entity) const noexcept {
+			// 1. 索引必须在水位线之内 (防止访问未出生的实体)
+			// 2. 索引必须小于物理上限 (防止越界)
+			// 3. 版本号必须匹配 (防止僵尸)
+			return entity.index() < next_idx &&
+				generations[entity.index()] == entity.generation();
+		}
+		// 重置实体池
+		void clear() noexcept {
+			head = 0;
+			tail = 0;
+			next_idx = 0;
+			alive_entity_count = 0;
+			generations.fill(0);  // 重置所有版本号
+		}
+
+		[[nodiscard]] size_t size() const noexcept { return alive_entity_count; }
+
+		// 实体上限
+		[[nodiscard]] size_t capacity() const noexcept { return CAPACITY; }
+	};
+
 	class Registry {
 	private:
-		// 活跃实体计数
-		Entity_index alive_entity_count = 0;
-		//实体签名，
-		std::vector<Signature> entity_signatures;
-		// 内存更安全，销毁自动释放内存
-		std::vector<std::unique_ptr<ISparseSet>> Components_Pool;
+
+		template<typename... Components> friend class View;
+
+		EntityPool entity_pool;
+
+		//实体签名，无跳转
+		std::array<Signature, MAX_ENTITIES> entity_signatures;  
+		// 组件池，无跳转
+		std::array<std::unique_ptr<ISparseSet>, MAX_COMPONENTS> Components_Pool;  
 
 		// 获取组件池 (浅尝辄止)
 		template<typename T>
-		SparseSet<T>& get_pool() {
+		[[nodiscard]] SparseSet<T>& get_pool() {
 			Component_ID id = get_component_type_id<T>();
 			// 边界检查 (Debug only)
 			assert(id < MAX_COMPONENTS && "Component ID out of range!");
 			
 			// 初始化组件池
 			if (Components_Pool[id] == nullptr) {
-				Components_Pool[id] = std::make_unique<SparseSet<T>>(MAX_ENTITIES);		//显示加载，便于维护
+				Components_Pool[id] = std::make_unique<SparseSet<T>>();		// 延迟初始化
 			}
 
 			return *static_cast<SparseSet<T>*>(Components_Pool[id].get());		// 安全解引用
 		}
 	public:
-		Registry()
-			: entity_signatures(MAX_ENTITIES)      //100000 签名在堆上，安全
-			, Components_Pool(MAX_COMPONENTS)     // 64个指针在对象中，数据在堆上
-		{
+		Registry(){}
+
+
+		// 新增：检查实体是否存活
+		[[nodiscard]] bool is_alive(Entity entity) const noexcept {
+			return entity_pool.is_valid(entity);
 		}
+
 		// 创建实体
-		Entity create_entity(Entity_index index, Entity_generation gen) {
-			assert(alive_entity_count < MAX_ENTITIES && "Entity out of range!");
-			Entity(index, gen);
+		[[nodiscard]] Entity create_entity() noexcept {
+			return entity_pool.acquire();
 
 		}
-		// 是否有实体
+		// 是否有对应组件
 		template<typename T>
-		bool has(Entity entity) const {
-			assert(entity < alive_entity_count && entity < MAX_ENTITIES && "Entity out of count!");		//实体数量不可超过最大值
+		[[nodiscard]] bool has(Entity entity) const {
+			assert(is_alive(entity) && "Entity is dead or stale!");
 			Component_ID id = get_component_type_id<T>();
-			return entity_signatures[entity][id];
+			return entity_signatures[entity.index()][id];
 
 		}
-		// 给实体挂起组件
-		template<typename T>
-		void emplace(Entity entity, T component) {
-			assert(entity < alive_entity_count && entity < MAX_ENTITIES && "Entity out of count");
-			Component_ID id = get_component_type_id<T>();	//获取组件id（在签名中的位数）
-			assert(id < MAX_COMPONENTS && "Component ID out of MAX");
-			entity_signatures[entity].set(id);		//签名层面挂起
-			get_pool<T>().emplace(entity, component);	//SparseSet层面挂起
+		// 完美转发
+		// 给实体挂起组件(优化为原地构造)
+		template<typename T, typename... Args>
+		[[nodiscard]] T& emplace(Entity entity, Args&&... args) {  // ✅ 原地构造
+			assert(is_alive(entity));
+			Component_ID id = get_component_type_id<T>();
+			entity_signatures[entity.index()].set(id);
+			return get_pool<T>().emplace(entity, std::forward<Args>(args)...);
 		}
+
+
+		// 获取该实体的指定组件
 		// 方案A：双版本设计（推荐）
 		// 快速路径：用于 System 遍历（保证存在）
 		template<typename T>
-		T& get(Entity entity) {
+		[[nodiscard]] T& get(Entity entity) {
+			assert(is_alive(entity) && "Entity is dead or stale!");
 			assert(has<T>(entity) && "Entity does not have component! Use try_get() for safe access.");
 			return get_pool<T>().get(entity);
 		}
 
 		// 安全路径：用于用户代码（可能不存在）
 		template<typename T>
-		std::optional<std::reference_wrapper<T>> try_get(Entity entity) {
+		[[nodiscard]] std::optional<std::reference_wrapper<T>> try_get(Entity entity) noexcept {
+			if (!is_alive(entity)) return std::nullopt;
 
-			// 先检查 entity 有效性（Release 模式也需要）
-			if (entity >= alive_entity_count || entity >= MAX_ENTITIES) {
-				return std::nullopt;
-			}
-			if (has<T>(entity)) {
-				return std::ref(get_pool<T>().get(entity));
-			}
-			return std::nullopt;
+			Component_ID id = get_component_type_id<T>();
+			if (!entity_signatures[entity.index()][id]) return std::nullopt;
+
+			return std::ref(get_pool<T>().get(entity));
 		}
+
 		// 移除指定实体指定组件
 		template<typename T>
 		void remove(Entity entity) {
-			assert(entity < alive_entity_count && entity < MAX_ENTITIES && "Entity out of count");
+			assert(is_alive(entity) && "Entity is dead or stale!");
 			Component_ID id = get_component_type_id<T>();
-			entity_signatures[entity].reset(id);		// 移除后 置0
-			get_pool<T>().remove(entity);
+			entity_signatures[entity.index()].reset(id);		// 签名层面移除
+			get_pool<T>().remove(entity);						// 组件池层面移除
 		}
 
 		// 销毁实体
 		void destroy_entity(Entity entity) {
-			assert(entity.index() < alive_entity_count && entity.index() < MAX_ENTITIES && "Entity out of range!");
+			assert(is_alive(entity) && "Entity is dead or stale!");
 
 			Signature& sig = entity_signatures[entity.index()];
 
@@ -121,12 +224,12 @@ namespace Rinn {
 			}
 
 			sig.reset();
-			--alive_entity_count;
+			entity_pool.release(entity.index());
 		}
 
 		// 返回活跃实体 (未实现实体重用)
-		size_t size() const {
-			return alive_entity_count;  // 只返回活跃实体
+		[[nodiscard]] size_t size() const {
+			return entity_pool.size();  // 只返回活跃实体
 		}
 
 		// 保留 Registry 结构，清空组件
@@ -141,11 +244,109 @@ namespace Rinn {
 			// 2. 重置所有签名
 			std::fill(entity_signatures.begin(), entity_signatures.end(), Signature{});
 
-			// 3. 重置实体计数
-			alive_entity_count = 0;
+			// 3. 重置实体池
+			entity_pool.clear();
 
-			// 注意：Components_Pool 结构保留（64个指针，可能为nullptr）
+			// 注意：Components_Pool 结构保留（64个指针，日后可继续使用）
 		}
+	};
+
+	
+	template<typename... Components>
+	class View {
+	private:
+		Registry& reg;					 // 获取组件池
+		ISparseSet* smallest_pool;		 // 指针，非拥有
+		Signature required_signature;	 // 需要的组件签名 实现 O(1)遍历
+	public:
+		View(Registry& r) : reg(r), smallest_pool(nullptr) {
+			find_smallest();  // 构造函数体内调用
+			build_signature();	// 构造签名
+		}
+
+		// 开始：从索引 0 开始找，Iterator 构造函数会自动跳过不合法的
+		auto begin() const {
+			return viewIterator(*this, 0);
+		}
+
+		// 结束：索引等于 size 就是结束
+		auto end() const {
+			return viewIterator(*this, smallest_pool->size());
+		}
+
+		struct viewIterator {
+
+			// 获取view的引用
+			const View& view;
+
+			// 当前在最小池里面的索引
+			size_t index;
+
+			// 构造函数
+			viewIterator(const View& v, size_t i) : view(v), index(i) {
+				// 🔥 关键点：一出生就要检查自己脚下的位置是否合法
+				// 如果 index 0 的实体不符合要求，必须马上跳到下一个
+				if (index < view.smallest_pool->size() && !is_valid()) {
+					++(*this); // 触发查找逻辑
+				}
+			}
+
+			// 判断实体是否合法
+			bool is_valid() const {
+				Entity candidate = view.smallest_pool->entity_at(index);
+				Signature entity_sig = view.reg.entity_signatures[candidate.index()];
+
+				// 逻辑核心：
+				// 1. entity_sig & required_signature 
+				//    -> 过滤出实体身上符合要求的那些组件。
+				// 2. ... == required_signature 
+				//    -> 检查过滤出来的结果，是否完完整整等于我要求的全部。
+
+				return (entity_sig & view.required_signature) == view.required_signature;
+			}
+
+			// 核心：前进一步
+			viewIterator& operator++() {
+				// 1. 先盲目走一步
+				index++;
+
+				// 2. 只要没到底，且当前实体不合格，就继续走
+				// 这就是 "Lazy Evaluation" (惰性求值)
+				while (index < view.smallest_pool->size() && !is_valid()) {
+					index++;
+				}
+				return *this;
+			}
+
+			// 比较：只要索引不一样，就不相等
+			bool operator!=(const viewIterator& other) const {
+				return index != other.index;
+			}
+
+			Entity operator*() const {
+				return view.smallest_pool->entity_at(index);  // 返回完整的 Entity（含 generation）
+			}
+
+		};
+
+	private:
+		// 查找最小池
+		void find_smallest() {
+			size_t min_size = SIZE_MAX;
+			([&] {
+				auto& pool = reg.get_pool<Components>();
+				if (pool.size() < min_size) {
+					min_size = pool.size();
+					smallest_pool = &pool;  // 存地址
+				}
+				}(), ...);
+		}
+
+		// 构造所需签名
+		void build_signature() {
+			(required_signature.set(get_component_type_id<Components>()), ...);
+		}
+
 	};
 }
 

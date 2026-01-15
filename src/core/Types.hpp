@@ -3,6 +3,13 @@
 #include <limits>
 #include <bitset> // <--- 必须加这个
 #include <algorithm>	// 实现 fill
+#include <array>		// 为了内存连续
+#include<vector>
+#include<cassert>
+#include <utility>  // 包含 std::forward
+#include <concepts> // 确保构造的时候参数合法，能够造出 T
+#include <optional>		// 为了实现 “空返回”
+#include <bit>			// 为了实现快速  实体销毁组件
 
 // 1. 定义实体 ID
 // -------------------------------------------------------------------------

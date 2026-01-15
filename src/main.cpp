@@ -1,55 +1,104 @@
 #include <iostream>
-#include "Core/SparseSet.hpp"
-#include "components/Components.hpp"
+#include <format>
 #include "Core/Registry.hpp"
+#include "components/Components.hpp"
 
-// �����ӡ����
-void print_dense(Rinn::SparseSet<Transform>& set) {
-    std::cout << "Dense Array Content:\n";
-    for (auto& t : set) { // ������ĵ�����
-        std::cout << "[Addr: " << &t << "] Val: (" << t.x << ", " << t.y << ")\n";
-    }
-    std::cout << "-----------------------\n";
+// ============================================================================
+// Test Case 1: 创建 N 个实体，挂上 Position + Velocity，验证 View 遍历
+// ============================================================================
+
+void print_separator(const char* title) {
+    std::cout << "\n========== " << title << " ==========\n";
 }
 
 int main() {
-    // 1. ��ʼ��
-    Rinn::SparseSet<Transform> positions(100);
+    using namespace Rinn;
 
-    // 2. ���Ӳ��� (��������)
-    std::cout << ">>> Adding Entities 10, 50, 3...\n";
-    positions.add(10, { 10.0f, 10.0f });
-    positions.add(50, { 50.0f, 50.0f });
-    positions.add(3, { 3.0f,  3.0f });
+    Registry registry;
+    constexpr int TEST_COUNT = 5;
 
-    // 3. ��֤�ڴ�������
-    // Ԥ�ڣ�������ַӦ�ý����ţ���� 8 �ֽ� (2��float)
-    print_dense(positions);
+    // --------------------------------------------------------------------
+    // Step 1: 创建实体并挂载组件
+    // --------------------------------------------------------------------
+    print_separator("Step 1: Create Entities & Emplace Components");
 
-    // 4. ��ȡ����
-    if (positions.has(50)) {
-        Transform& t = positions.get(50);
-        std::cout << "Entity 50 Position: " << t.x << "\n";
+    std::array<Entity, TEST_COUNT> entities;
+
+    for (int i = 0; i < TEST_COUNT; ++i) {
+        entities[i] = registry.create_entity();
+        
+        // 挂载 Transform (Position)
+        (void)registry.emplace<Transform>(entities[i], 
+            static_cast<float>(i * 10),     // x
+            static_cast<float>(i * 10 + 5)  // y
+        );
+        
+        // 挂载 RigidBody (Velocity)
+        (void)registry.emplace<RigidBody>(entities[i], 
+            static_cast<float>(i),          // vx
+            static_cast<float>(i * 2)       // vy
+        );
+
+        std::cout << std::format("Entity[{}] created: index={}, gen={}\n", 
+            i, entities[i].index(), entities[i].generation());
     }
 
-    // 5. ɾ������ (Swap & Pop)
-    std::cout << "\n>>> Removing Entity 10 (First element)...\n";
-    positions.remove(10);
-    // Ԥ�ڣ�Entity 3 ������Ӧ�ñ��ᵽ�� Entity 10 ԭ����λ��
+    std::cout << std::format("Registry size: {} entities\n", registry.size());
 
-    print_dense(positions);
+    // --------------------------------------------------------------------
+    // Step 2: 使用 View<Transform, RigidBody> 遍历
+    // --------------------------------------------------------------------
+    print_separator("Step 2: View<Transform, RigidBody> Iteration");
 
-    // 6. ��֤���������Ƿ��޺���
-    if (positions.has(3)) {
-        std::cout << "Entity 3 is still alive.\n";
-    }
-    else {
-        std::cout << "ERROR: Entity 3 vanished!\n";
+    int count = 0;
+    View<Transform, RigidBody> view(registry);
+
+    for (Entity e : view) {
+        Transform& t = registry.get<Transform>(e);
+        RigidBody& rb = registry.get<RigidBody>(e);
+
+        std::cout << std::format("  Entity[idx={}, gen={}]: pos=({:.1f}, {:.1f}), vel=({:.1f}, {:.1f})\n",
+            e.index(), e.generation(), t.x, t.y, rb.vx, rb.vy);
+
+        ++count;
     }
 
-    if (!positions.has(10)) {
-        std::cout << "Entity 10 is correctly removed.\n";
+    std::cout << std::format("View hit count: {} (expected: {})\n", count, TEST_COUNT);
+
+    // Assertion: 应该遍历到全部实体
+    if (count != TEST_COUNT) {
+        std::cerr << "ERROR: View count mismatch!\n";
+        return 1;
     }
+
+    // --------------------------------------------------------------------
+    // Step 3: 验证单个组件获取
+    // --------------------------------------------------------------------
+    print_separator("Step 3: Component Access Verification");
+
+    for (int i = 0; i < TEST_COUNT; ++i) {
+        if (!registry.is_alive(entities[i])) {
+            std::cerr << std::format("ERROR: Entity[{}] should be alive!\n", i);
+            return 1;
+        }
+
+        if (!registry.has<Transform>(entities[i])) {
+            std::cerr << std::format("ERROR: Entity[{}] should have Transform!\n", i);
+            return 1;
+        }
+
+        if (!registry.has<RigidBody>(entities[i])) {
+            std::cerr << std::format("ERROR: Entity[{}] should have RigidBody!\n", i);
+            return 1;
+        }
+    }
+
+    std::cout << "All entities alive and have required components. PASS.\n";
+
+    // --------------------------------------------------------------------
+    // Summary
+    // --------------------------------------------------------------------
+    print_separator("Test Case 1 PASSED");
 
     return 0;
 }
