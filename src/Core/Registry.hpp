@@ -19,8 +19,8 @@ namespace Rinn {
 		// 2. 核心数据 (全部 Inline，无堆分配)
 		// 32KB 的 Ring Buffer + 32KB 的 Generation 数组
 		// 这一坨 64KB 的数据紧密排列，对 L1/L2 Cache 极度友好
-		std::array<Entity_generation, CAPACITY> generations;	// 版本数组
-		std::array<Entity_index, CAPACITY> ring_buffer;			// 存放尸体的环形缓冲区
+		std::array<Entity_generation, CAPACITY> generations{};	// 版本数组 (零初始化)
+		std::array<Entity_index, CAPACITY> ring_buffer{};		// 存放尸体的环形缓冲区 (零初始化)
 
 		// 3. 游标 (使用 uint16 足够，节省寄存器宽度)
 		uint16_t head = 0;

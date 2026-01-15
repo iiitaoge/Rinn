@@ -50,7 +50,7 @@ int main() {
     // --------------------------------------------------------------------
     print_separator("Step 2: View<Transform, RigidBody> Iteration");
 
-    int count = 0;
+    int step2_count = 0;
     View<Transform, RigidBody> view(registry);
 
     for (Entity e : view) {
@@ -60,13 +60,13 @@ int main() {
         std::cout << std::format("  Entity[idx={}, gen={}]: pos=({:.1f}, {:.1f}), vel=({:.1f}, {:.1f})\n",
             e.index(), e.generation(), t.x, t.y, rb.vx, rb.vy);
 
-        ++count;
+        ++step2_count;
     }
 
-    std::cout << std::format("View hit count: {} (expected: {})\n", count, TEST_COUNT);
+    std::cout << std::format("View hit count: {} (expected: {})\n", step2_count, TEST_COUNT);
 
     // Assertion: 应该遍历到全部实体
-    if (count != TEST_COUNT) {
+    if (step2_count != TEST_COUNT) {
         std::cerr << "ERROR: View count mismatch!\n";
         return 1;
     }
@@ -296,9 +296,272 @@ int main() {
     std::cout << "Test Case 6 PASSED.\n";
 
     // --------------------------------------------------------------------
+    // Test Case 7: try_get 安全访问路径
+    // --------------------------------------------------------------------
+    print_separator("Test Case 7: try_get Safe Access");
+
+    // 场景 1: 对有组件的实体调用 try_get，应返回有效值
+    {
+        auto result = registry.try_get<Transform>(entities[1]);
+        if (!result.has_value()) {
+            std::cerr << "ERROR: try_get<Transform> should return value for entities[1]!\n";
+            return 1;
+        }
+        
+        Transform& t = result->get();
+        std::cout << std::format("try_get<Transform>(entities[1]): ({:.1f}, {:.1f}) - OK\n", t.x, t.y);
+    }
+
+    // 场景 2: 对没有该组件的实体调用 try_get，应返回 nullopt
+    // (entities[0] 在 Case 5 中已被移除 RigidBody)
+    {
+        auto result = registry.try_get<RigidBody>(entities[0]);
+        if (result.has_value()) {
+            std::cerr << "ERROR: try_get<RigidBody> should return nullopt for entities[0]!\n";
+            return 1;
+        }
+        std::cout << "try_get<RigidBody>(entities[0]) == nullopt - OK\n";
+    }
+
+    // 场景 3: 对只有 Transform 的 partial_entity 调用 try_get<RigidBody>
+    {
+        auto result = registry.try_get<RigidBody>(partial_entity);
+        if (result.has_value()) {
+            std::cerr << "ERROR: try_get<RigidBody> should return nullopt for partial_entity!\n";
+            return 1;
+        }
+        std::cout << "try_get<RigidBody>(partial_entity) == nullopt - OK\n";
+    }
+
+    // 场景 4: 对死亡实体调用 try_get，应返回 nullopt (不崩溃)
+    {
+        auto result = registry.try_get<Transform>(stale_handle);
+        if (result.has_value()) {
+            std::cerr << "ERROR: try_get should return nullopt for stale handle!\n";
+            return 1;
+        }
+        std::cout << "try_get<Transform>(stale_handle) == nullopt - OK (no crash)\n";
+    }
+
+    // 场景 5: try_get 返回的引用可修改
+    {
+        auto result = registry.try_get<Transform>(entities[3]);
+        if (!result.has_value()) {
+            std::cerr << "ERROR: try_get<Transform> should return value for entities[3]!\n";
+            return 1;
+        }
+
+        Transform& t = result->get();
+        float old_x = t.x;
+        t.x = 12345.0f;
+
+        // 验证修改生效
+        Transform& t2 = registry.get<Transform>(entities[3]);
+        if (t2.x != 12345.0f) {
+            std::cerr << "ERROR: try_get returned non-reference!\n";
+            return 1;
+        }
+
+        // 还原
+        t.x = old_x;
+        std::cout << "try_get returns mutable reference - OK\n";
+    }
+
+    std::cout << "Test Case 7 PASSED.\n";
+
+    // ====================================================================
+    // TIER 2: 边界条件测试
+    // ====================================================================
+
+    // --------------------------------------------------------------------
+    // Test Case 8: 空 View — 没有任何实体有目标组件
+    // --------------------------------------------------------------------
+    print_separator("Test Case 8: Empty View");
+
+    // 定义一个新组件类型用于测试（没有任何实体拥有）
+    struct Unused {
+        int dummy;
+    };
+
+    {
+        int empty_count = 0;
+        View<Unused> empty_view(registry);
+        for ([[maybe_unused]] Entity e : empty_view) {
+            ++empty_count;
+        }
+
+        if (empty_count != 0) {
+            std::cerr << "ERROR: Empty View should yield 0 entities!\n";
+            return 1;
+        }
+        std::cout << "View<Unused> iteration count: 0 - OK\n";
+    }
+
+    // 额外测试：多组件 View 但其中一个池为空
+    {
+        int mixed_count = 0;
+        View<Transform, Unused> mixed_view(registry);
+        for ([[maybe_unused]] Entity e : mixed_view) {
+            ++mixed_count;
+        }
+
+        if (mixed_count != 0) {
+            std::cerr << "ERROR: Mixed View with empty component should yield 0!\n";
+            return 1;
+        }
+        std::cout << "View<Transform, Unused> iteration count: 0 - OK\n";
+    }
+
+    std::cout << "Test Case 8 PASSED.\n";
+
+    // --------------------------------------------------------------------
+    // Test Case 9: Registry::clear() — 全部重置
+    // --------------------------------------------------------------------
+    print_separator("Test Case 9: Registry Clear");
+
+    // 保存一些现有 Handle 用于验证
+    std::array<Entity, 3> handles_before_clear = { entities[1], entities[3], entities[4] };
+
+    std::cout << std::format("Before clear: registry.size() = {}\n", registry.size());
+
+    // 执行 clear
+    registry.clear();
+
+    std::cout << std::format("After clear: registry.size() = {}\n", registry.size());
+
+    if (registry.size() != 0) {
+        std::cerr << "ERROR: Registry size should be 0 after clear!\n";
+        return 1;
+    }
+
+    // 验证旧 Handle 全部失效
+    for (size_t i = 0; i < handles_before_clear.size(); ++i) {
+        if (registry.is_alive(handles_before_clear[i])) {
+            std::cerr << std::format("ERROR: Handle[{}] should be invalid after clear!\n", i);
+            return 1;
+        }
+    }
+    std::cout << "All old handles invalidated after clear - OK\n";
+
+    // 验证 View 为空
+    {
+        int clear_count = 0;
+        View<Transform> view_after_clear(registry);
+        for ([[maybe_unused]] Entity e : view_after_clear) {
+            ++clear_count;
+        }
+        if (clear_count != 0) {
+            std::cerr << "ERROR: View should be empty after clear!\n";
+            return 1;
+        }
+        std::cout << "View<Transform> empty after clear - OK\n";
+    }
+
+    // 验证可以继续创建新实体
+    Entity post_clear_entity = registry.create_entity();
+    (void)registry.emplace<Transform>(post_clear_entity, 1.0f, 1.0f);
+
+    if (!registry.is_alive(post_clear_entity)) {
+        std::cerr << "ERROR: New entity after clear should be alive!\n";
+        return 1;
+    }
+    std::cout << std::format("New entity after clear: idx={}, gen={} - OK\n",
+        post_clear_entity.index(), post_clear_entity.generation());
+
+    std::cout << "Test Case 9 PASSED.\n";
+
+    // --------------------------------------------------------------------
+    // Test Case 10: 大量创建+销毁 — Ring Buffer 压力测试
+    // --------------------------------------------------------------------
+    print_separator("Test Case 10: Stress Test (10000+ entities)");
+
+    // 先清空，从干净状态开始
+    registry.clear();
+
+    constexpr int STRESS_COUNT = 10000;
+    std::vector<Entity> stress_entities;
+    stress_entities.reserve(STRESS_COUNT);
+
+    // Phase 1: 创建 10000 个实体
+    std::cout << std::format("Creating {} entities...\n", STRESS_COUNT);
+    for (int i = 0; i < STRESS_COUNT; ++i) {
+        Entity e = registry.create_entity();
+        (void)registry.emplace<Transform>(e, static_cast<float>(i), static_cast<float>(i));
+        stress_entities.push_back(e);
+    }
+
+    if (registry.size() != STRESS_COUNT) {
+        std::cerr << std::format("ERROR: Expected {} entities, got {}\n", STRESS_COUNT, registry.size());
+        return 1;
+    }
+    std::cout << std::format("Created {} entities - OK\n", STRESS_COUNT);
+
+    // Phase 2: 销毁前 5000 个
+    std::cout << "Destroying first 5000 entities...\n";
+    for (int i = 0; i < 5000; ++i) {
+        registry.destroy_entity(stress_entities[i]);
+    }
+
+    if (registry.size() != 5000) {
+        std::cerr << std::format("ERROR: Expected 5000 entities, got {}\n", registry.size());
+        return 1;
+    }
+
+    // 验证前 5000 个 Handle 失效
+    for (int i = 0; i < 5000; ++i) {
+        if (registry.is_alive(stress_entities[i])) {
+            std::cerr << std::format("ERROR: Entity[{}] should be dead!\n", i);
+            return 1;
+        }
+    }
+    std::cout << "First 5000 entities destroyed and invalidated - OK\n";
+
+    // Phase 3: 再创建 5000 个（应该复用旧索引）
+    std::cout << "Creating 5000 new entities (should reuse indices)...\n";
+    int reused_count = 0;
+    for (int i = 0; i < 5000; ++i) {
+        Entity e = registry.create_entity();
+        (void)registry.emplace<Transform>(e, 999.0f, 999.0f);
+
+        // 检查是否复用了旧索引
+        if (e.index() < 5000) {
+            // 验证 Generation 是否递增
+            Entity old_handle = stress_entities[e.index()];
+            if (e.generation() == old_handle.generation() + 1) {
+                ++reused_count;
+            }
+        }
+    }
+
+    std::cout << std::format("Reused {} indices with incremented generation\n", reused_count);
+
+    if (registry.size() != 10000) {
+        std::cerr << std::format("ERROR: Expected 10000 entities, got {}\n", registry.size());
+        return 1;
+    }
+
+    // Phase 4: 验证 View 遍历正确
+    {
+        int view_count = 0;
+        View<Transform> final_view(registry);
+        for ([[maybe_unused]] Entity e : final_view) {
+            ++view_count;
+        }
+
+        if (view_count != 10000) {
+            std::cerr << std::format("ERROR: View should hit 10000 entities, got {}\n", view_count);
+            return 1;
+        }
+        std::cout << std::format("Final View<Transform> hits {} entities - OK\n", view_count);
+    }
+
+    std::cout << "Test Case 10 PASSED.\n";
+
+    // --------------------------------------------------------------------
     // Summary
     // --------------------------------------------------------------------
     print_separator("ALL TEST CASES PASSED");
+    std::cout << "\n*** ECS Core Validation Complete! ***\n";
 
     return 0;
 }
