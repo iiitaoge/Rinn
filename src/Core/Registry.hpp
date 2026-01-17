@@ -256,12 +256,23 @@ namespace Rinn {
 	class View {
 	private:
 		Registry& reg;					 // 获取组件池
-		ISparseSet* smallest_pool;		 // 指针，非拥有
+		ISparseSet* smallest_pool;		 // 指针，非拥有（仅用于 find_smallest）
+		
+		// ⭐ 缓存：消除遍历中的虚函数调用
+		const Entity* cached_entities;  // 直接指向 dense_to_entity.data()
+		size_t cached_size;
+		
 		Signature required_signature;	 // 需要的组件签名 实现 O(1)遍历
 	public:
-		View(Registry& r) : reg(r), smallest_pool(nullptr) {
+		View(Registry& r) : reg(r), smallest_pool(nullptr), cached_entities(nullptr), cached_size(0) {
 			find_smallest();  // 构造函数体内调用
 			build_signature();	// 构造签名
+			
+			// ⭐ 只在构造时调用一次虚函数，之后遍历全部走裸指针
+			if (smallest_pool) {
+				cached_entities = smallest_pool->entity_data();
+				cached_size = smallest_pool->size();
+			}
 		}
 
 		// 开始：从索引 0 开始找，Iterator 构造函数会自动跳过不合法的
@@ -271,7 +282,7 @@ namespace Rinn {
 
 		// 结束：索引等于 size 就是结束
 		auto end() const {
-			return viewIterator(*this, smallest_pool->size());
+			return viewIterator(*this, cached_size);  // ⭐ 使用缓存 size
 		}
 
 		struct viewIterator {
@@ -286,14 +297,15 @@ namespace Rinn {
 			viewIterator(const View& v, size_t i) : view(v), index(i) {
 				// 🔥 关键点：一出生就要检查自己脚下的位置是否合法
 				// 如果 index 0 的实体不符合要求，必须马上跳到下一个
-				if (index < view.smallest_pool->size() && !is_valid()) {
+				if (index < view.cached_size && !is_valid()) {
 					++(*this); // 触发查找逻辑
 				}
 			}
 
 			// 判断实体是否合法
 			bool is_valid() const {
-				Entity candidate = view.smallest_pool->entity_at(index);
+				// ⭐ 直接数组访问，无虚函数调用！
+				Entity candidate = view.cached_entities[index];
 				Signature entity_sig = view.reg.entity_signatures[candidate.index()];
 
 				// 逻辑核心：
@@ -312,7 +324,7 @@ namespace Rinn {
 
 				// 2. 只要没到底，且当前实体不合格，就继续走
 				// 这就是 "Lazy Evaluation" (惰性求值)
-				while (index < view.smallest_pool->size() && !is_valid()) {
+				while (index < view.cached_size && !is_valid()) {
 					index++;
 				}
 				return *this;
@@ -324,7 +336,7 @@ namespace Rinn {
 			}
 
 			Entity operator*() const {
-				return view.smallest_pool->entity_at(index);  // 返回完整的 Entity（含 generation）
+				return view.cached_entities[index];  // ⭐ 直接数组访问，无虚函数！
 			}
 
 		};

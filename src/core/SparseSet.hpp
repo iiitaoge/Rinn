@@ -18,7 +18,9 @@ namespace Rinn {
 		virtual void remove(Entity entity) = 0;
 		virtual void clear() = 0;
 		virtual size_t size() const noexcept = 0;
-		virtual Entity entity_at(size_t index) const = 0;  // View 遍历用
+		
+		// ⭐ 新增：暴露底层实体数组指针，View 构造时缓存，消除遍历中的虚函数调用
+		virtual const Entity* entity_data() const noexcept = 0;
 
 	protected:
 		std::array<Entity_index, MAX_ENTITIES> Sparse;
@@ -130,10 +132,10 @@ namespace Rinn {
 			return Dense.size();
 		}
 
-		// View 遍历：获取第 i 个实体
-		[[nodiscard]] Entity entity_at(size_t index) const override {
-			assert(index < dense_to_entity.size() && "Index out of range!");
-			return dense_to_entity[index];
+
+		// ⭐ 新增：返回实体数组指针，供 View 缓存使用
+		[[nodiscard]] const Entity* entity_data() const noexcept override {
+			return dense_to_entity.data();
 		}
 
 		// 为System准备的迭代器 

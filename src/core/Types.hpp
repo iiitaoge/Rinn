@@ -35,6 +35,7 @@ struct Entity {
     }
 
     // 1. 获取索引 (用于数组寻址) -> O(1) 位运算
+    // 如果可能，请在编译期算，运行期算也可以
     [[nodiscard]] constexpr uint16_t index() const noexcept {
         return static_cast<uint16_t>(id & INDEX_MASK);
     }
@@ -50,7 +51,9 @@ struct Entity {
     }
 
     // 4. 支持 C++20 默认比较 (==, !=)
-    auto operator<=>(const Entity&) const = default;
+    // 虽然使用场景不多，常用的是index和generation，但未来可能用上
+    // 传值引用 比指针 引用 更快
+    friend auto operator<=>(Entity, Entity) = default;  
 
     // 5. 支持作为 Map 的 Key (如果是 std::map)
     // 但我们在 ECS 里通常不用 map，而是用 sparse set
