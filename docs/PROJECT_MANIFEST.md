@@ -1,7 +1,7 @@
 # PROJECT RINN: SYSTEM ARCHITECTURE & CODING STANDARDS
 
 ## 1. 项目身份 (Identity)
-* **目标**: 构建一个基于 C++20 的**系统性叙事引擎 (Systemic Narrative Engine / Emergent Sim)**。
+* **目标**: 构建一个基于 C++20 的**系统性涌现玩法引擎 (Systemic Narrative Engine / Emergent Sim)**。
 * **核心哲学**: Data-Oriented Design (DOD) 优于 Object-Oriented Programming (OOP)。
 * **验收标准**: 必须达到工业级健壮性（无崩溃、内存安全），高性能（支持 10k+ 实体），且具备高扩展性（Lua 驱动逻辑）。
 
