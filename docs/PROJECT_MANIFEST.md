@@ -48,12 +48,6 @@
 * `src/Resources/`: 资源管理器 (TextureManager, StringPool)。
 * `src/Game/`: 游戏具体逻辑的入口，Main Loop。
 
-## 5. 当前开发阶段 (Current Phase: Phase 1)
-* **目标**: 建立核心循环 (Infrastructure & Loop)。
-* **当前任务**:
-    1.  完善基于 Sparse Set 的 ECS `Registry::view<T...>()` 功能。
-    2.  实现安全的 Lua 绑定，使 Lua 能控制实体的创建和移动。
-    3.  确保热重载 (Hot-reload) 机制可用。
 
 ## 6. 指令示例 (Prompt Examples)
 当编写代码时，Cursor 必须遵循：

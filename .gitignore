@@ -8,6 +8,7 @@ build/
 out/
 bin/
 lib/
+external/
 
 cmake-build-*/
 _deps/

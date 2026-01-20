@@ -7,3 +7,8 @@ struct Transform {
 struct RigidBody {
     float vx, vy;
 };
+
+struct Velocity {
+    float vx, vy;
+};
+

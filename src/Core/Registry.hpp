@@ -123,7 +123,7 @@ namespace Rinn {
 			
 			// 初始化组件池
 			if (Components_Pool[id] == nullptr) {
-				Components_Pool[id] = std::make_unique<SparseSet<T>>();		// 延迟初始化
+				Components_Pool[id] = std::make_unique<SparseSet<T>>();		// 延迟初始化，定义的组件类型可能会变
 			}
 
 			return *static_cast<SparseSet<T>*>(Components_Pool[id].get());		// 安全解引用
