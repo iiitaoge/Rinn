@@ -4,8 +4,9 @@
 #include "components/Components.hpp"
 #include <sol/sol.hpp>
 #include "Scripting/ScriptContext.hpp"
-#include <Scripting/LuaBinder.hpp>
+#include "Scripting/LuaBinder.hpp"
 #include <raylib.h>
+#include "Systems/RenderSystem.hpp"
 // ============================================================================
 // Test Case 1: 创建 N 个实体，挂上 Position + Velocity，验证 View 遍历
 // ============================================================================

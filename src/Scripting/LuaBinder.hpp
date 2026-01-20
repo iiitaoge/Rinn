@@ -1,6 +1,6 @@
 #pragma once
-#include <Core/Registry.hpp>
-#include <Scripting/ScriptContext.hpp>
+#include "Core/Registry.hpp"
+#include "Scripting/ScriptContext.hpp"
                                                             
 
 namespace Rinn {
