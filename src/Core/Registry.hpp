@@ -131,6 +131,12 @@ namespace Rinn {
 	public:
 		Registry(){}
 
+		// 提供一个辅助函数，返回 View 对象
+		template<typename... Components>
+		View<Components...> view() {
+			return View<Components...>(*this);
+		}
+
 
 		// 新增：检查实体是否存活
 		[[nodiscard]] bool is_alive(Entity entity) const noexcept {
