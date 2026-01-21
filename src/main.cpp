@@ -19,31 +19,35 @@ int main() {
     Registry reg;
 
     Rinn::ScriptContext ctx;
+    RenderSystem render;
+
 
     bind_registry(ctx.state(), reg);  // ← 绑定到 Lua
 
     ctx.run_file("D:/cs/vs/Project_Rinn/scripts/test.lua");
 
+    render.init(2000, 1200, "render");
 
-    // 2. 初始化窗口
-    InitWindow(800, 600, "Rinn Test");
+    // 2. 加载测试贴图
+    Texture2D testTexture = LoadTexture("D:/cs/vs/Project_Rinn/assets/test.png");
+
     SetTargetFPS(60);
 
-    // 3. 主循环
-    while (!WindowShouldClose()) {
-        BeginDrawing();
-        ClearBackground(DARKGRAY);
+    // 3. 创建实体并挂载组件
+    Entity e = reg.create_entity();
+    reg.emplace<Rinn::Transform>(e, 100.0f, 100.0f);
+    reg.emplace<Sprite>(e, testTexture, 64.0f, 64.0f);  // 贴图 + 尺寸
 
-        // 遍历所有有 Transform 的实体，画出来
-        for (Entity ent : reg.view<Rinn::Transform>()) {
-            auto& t = reg.get<Rinn::Transform>(ent);
-            DrawCircle((int)t.x, (int)t.y, 15, RED);
-        }
-
-        EndDrawing();
+    // 4. 主循环
+    while (!render.should_close()) {
+        render.begin_frame(DARKGRAY);
+        render.render(reg);  // ← 会绘制这个精灵
+        render.end_frame();
     }
 
-    CloseWindow();
+    // 5. 清理
+    UnloadTexture(testTexture);
+    render.shutdown();
 
 
     return 0;

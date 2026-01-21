@@ -1,7 +1,7 @@
 #pragma once
 #include <raylib.h>
 #include "Core/Registry.hpp"
-
+#include "components/Components.hpp"
 namespace Rinn {
     // 基本结构
     class RenderSystem {
@@ -95,6 +95,10 @@ namespace Rinn {
     // 根据渲染逻辑编写，暂时空着
     void RenderSystem::render(Registry& registry) {
         // TODO: 未来按 layer 遍历
-
+        for (Entity entity : registry.view<Transform, Sprite>()) {
+            auto& t = registry.get<Transform>(entity);
+            auto& s = registry.get<Sprite>(entity);
+            DrawTexture(s.texture, t.x, t.y, WHITE);
+        }
     }
 }
