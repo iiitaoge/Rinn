@@ -5,50 +5,51 @@
 #include <sol/sol.hpp>
 #include "Scripting/ScriptContext.hpp"
 #include "Scripting/LuaBinder.hpp"
-#include <raylib.h>
-#include "Systems/RenderSystem.hpp"
-// ============================================================================
-// Test Case 1: 创建 N 个实体，挂上 Position + Velocity，验证 View 遍历
-// ============================================================================
 
+// ============================================================================
+// Lua 绑定功能测试
+// ============================================================================
 
 int main() {
     using namespace Rinn;
 
+    std::cout << "=== C++ 初始化 ===" << std::endl;
+
     // 1. 创建 ECS
     Registry reg;
+    std::cout << "Registry 创建完成" << std::endl;
 
-    Rinn::ScriptContext ctx;
-    RenderSystem render;
+    // 2. 创建 Lua 上下文
+    ScriptContext ctx;
+    std::cout << "ScriptContext 创建完成" << std::endl;
 
+    // 3. 绑定 ECS 到 Lua
+    bind_registry(ctx.state(), reg);
+    std::cout << "bind_registry 完成" << std::endl;
 
-    bind_registry(ctx.state(), reg);  // ← 绑定到 Lua
-
-    ctx.run_file("D:/cs/vs/Project_Rinn/scripts/test.lua");
-
-    render.init(2000, 1200, "render");
-
-    // 2. 加载测试贴图
-    Texture2D testTexture = LoadTexture("D:/cs/vs/Project_Rinn/assets/test.png");
-
-    SetTargetFPS(60);
-
-    // 3. 创建实体并挂载组件
-    Entity e = reg.create_entity();
-    reg.emplace<Rinn::Transform>(e, 100.0f, 100.0f);
-    reg.emplace<Sprite>(e, testTexture, 64.0f, 64.0f);  // 贴图 + 尺寸
-
-    // 4. 主循环
-    while (!render.should_close()) {
-        render.begin_frame(DARKGRAY);
-        render.render(reg);  // ← 会绘制这个精灵
-        render.end_frame();
+    // 4. 执行测试脚本
+    std::cout << "\n=== 执行 Lua 脚本 ===" << std::endl;
+    try {
+        ctx.run_file("D:/cs/vs/Project_Rinn/scripts/test.lua");
+    } catch (const sol::error& e) {
+        std::cerr << "Lua 错误: " << e.what() << std::endl;
+        return 1;
     }
 
-    // 5. 清理
-    UnloadTexture(testTexture);
-    render.shutdown();
+    // 5. C++ 侧验证
+    std::cout << "=== C++ 验证 ===" << std::endl;
+    std::cout << "Registry 当前实体数: " << reg.size() << std::endl;
 
+    // 遍历所有带 Transform 的实体
+    std::cout << "遍历 View<Transform>:" << std::endl;
+    int count = 0;
+    for (Entity e : reg.view<Rinn::Transform>()) {
+        auto& t = reg.get<Rinn::Transform>(e);
+        std::cout << std::format("  Entity[{}]: x={}, y={}\n", e.index(), t.x, t.y);
+        count++;
+    }
+    std::cout << "共 " << count << " 个实体有 Transform" << std::endl;
 
+    std::cout << "\n=== 测试完成 ===" << std::endl;
     return 0;
 }
