@@ -11,7 +11,7 @@ namespace Rinn{
     };
     // Sprite = Image + 行为能力
     struct Sprite {
-        Texture2D texture;
+        uint16_t texture_id;  // 2 bytes - 索引到 ResourceManager
         float width, height;
         // 未来扩展：int animationFrame; 
     };

@@ -896,3 +896,85 @@ Registry 当前实体数: 4
 
 **结论**: Lua 绑定架构使用 **Trait + Fold Expression** 实现统一组件绑定，所有核心 API 测试通过。新增组件只需：1) 在 `ComponentList.hpp` 加类型 2) 在 `ComponentTraits.hpp` 加特化。
 
+---
+
+## ✅ 精灵渲染系统集成完成 (2026-01-31)
+
+### 🎉 里程碑
+
+**Lua 脚本可完整控制精灵实体创建与渲染！**
+
+---
+
+### ✅ 新增/重构
+
+#### 1. ResourceManager 完整实现
+
+| 功能 | 说明 |
+|------|------|
+| `load_texture(path)` | 幂等加载贴图，返回 ID |
+| `get_texture(id)` | O(1) 获取 Texture2D 引用 |
+| RAII 析构 | 自动释放 GPU 资源 |
+
+#### 2. Sprite 组件改为紧凑 POD
+
+```cpp
+struct Sprite {
+    uint16_t texture_id;  // 索引到 ResourceManager
+    float width, height;
+};  // 10 bytes，缓存友好
+```
+
+#### 3. RenderSystem 集成 ResourceManager
+
+```cpp
+void render(Registry& reg, ResourceManager& rm);
+```
+
+#### 4. ODR 修复
+
+为以下头文件中的类外函数定义添加 `inline`：
+- `LuaBinder.hpp`
+- `ResourceManager.hpp`
+- `RenderSystem.hpp`
+
+---
+
+### 📋 测试验证 (全部通过)
+
+**Lua 脚本 `test.lua`**:
+```lua
+local tex_shop = load_texture("assets/blacksmith_shop.png")
+local tex_pub = load_texture("assets/pub.png")
+
+local e1 = create_entity()
+emplace_Transform(e1, {x = 100, y = 100})
+emplace_Sprite(e1, {texture_id = tex_shop, width = 128, height = 128})
+```
+
+**渲染结果**: ✅ 两个精灵正确显示在窗口中
+
+---
+
+### 📈 进度更新
+
+| 模块 | 之前 | 现在 |
+|------|------|------|
+| **Lua 脚本系统** | 95% | **100%** | （未绑定其他内容，例如音效，音频，动画等）（未实现热重载）
+| **资源管理器** | 0% | **80%** (仅 Texture) |
+| **渲染系统** | 70% | **85%** |
+
+**已验证的 Lua API 更新**：
+
+| API | 状态 |
+|-----|------|
+| `load_texture(path)` | ✅ 新增 |
+
+---
+
+**结论**: 完整的 **Lua → ECS → Rendering** 管线已打通！Lua 脚本现在可以：
+1. 加载贴图资源
+2. 创建实体
+3. 添加 Transform + Sprite 组件
+4. 由 RenderSystem 自动渲染
+

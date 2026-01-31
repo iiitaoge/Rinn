@@ -3,7 +3,8 @@
 #include "Scripting/ScriptContext.hpp"
 #include "ComponentList.hpp"
 #include "ComponentTraits.hpp"
-
+#include "Resources/ResourceManager.hpp"
+#include <string>
 namespace Rinn {
 
 	// 绑定单个组件的所有操作
@@ -49,7 +50,7 @@ namespace Rinn {
 	}
 
 	// 绑定Registry
-	void bind_registry(sol::state& lua, Registry& reg) {
+	inline void bind_registry(sol::state& lua, Registry& reg) {
 
 		// 1. 绑定 Entity 类型
 		lua.new_usertype<Entity>("Entity",
@@ -73,5 +74,11 @@ namespace Rinn {
 
 		bind_all_components(lua, reg);
 		
+	}
+	// 绑定资源管理器
+	inline void bind_resources(sol::state& lua, ResourceManager& rm) {
+		lua["load_texture"] = [&rm](const std::string& path) {
+			return rm.load_texture(path);
+			};
 	}
 }

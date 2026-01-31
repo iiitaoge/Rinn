@@ -2,6 +2,7 @@
 #include <sol/sol.hpp>
 #include "components/Components.hpp"
 namespace Rinn {
+    // 未找到特化模板将会使用主模板
     // 主模板（未特化会编译报错）
     template<typename T>
     struct ComponentTrait {
@@ -50,17 +51,19 @@ namespace Rinn {
     template<>
     struct ComponentTrait<Sprite> {
         static constexpr const char* name = "Sprite";
-
         static Sprite from_table(sol::table t) {
-            Sprite s{};
-            s.width = t.get_or("width", 64.0f);
-            s.height = t.get_or("height", 64.0f);
-            // texture 需要从资源管理器获取，暂不支持
-            return s;
+            return {
+                t.get_or<uint16_t>("texture_id", 0),
+                t.get_or("width", 64.0f),
+                t.get_or("height", 64.0f)
+            };
         }
-
         static sol::table to_table(sol::state_view lua, const Sprite& c) {
-            return lua.create_table_with("width", c.width, "height", c.height);
+            return lua.create_table_with(
+                "texture_id", c.texture_id,
+                "width", c.width,
+                "height", c.height
+            );
         }
     };
 }

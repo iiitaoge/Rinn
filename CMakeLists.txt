@@ -56,6 +56,9 @@ add_executable(${PROJECT_NAME}
     src/components/Components.hpp
     src/Scripting/ScriptContext.hpp
     src/Scripting/LuaBinder.hpp
+    src/Scripting/ComponentList.hpp
+    src/Scripting/ComponentTraits.hpp
+    src/Resources/ResourceManager.hpp
 )
 
 # Include 路径：让 #include <Core/xxx> 能找到

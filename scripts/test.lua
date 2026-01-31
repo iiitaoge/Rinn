@@ -1,59 +1,23 @@
 -- ============================================
--- Lua 绑定功能测试脚本
+-- Lua 精灵渲染测试
 -- ============================================
 
-print("========== Lua 脚本测试开始 ==========")
+print("=== Lua 精灵渲染测试 ===")
 
--- 1. 测试实体创建
-print("\n[Test 1] 创建实体...")
-local entities = {}
-for i = 1, 5 do
-    entities[i] = create_entity()
-    print("  创建实体 #" .. i .. ", index = " .. entities[i]:index() .. ", generation = " .. entities[i]:generation())
-end
+-- 1. 加载贴图资源
+local tex_shop = load_texture("D:/cs/vs/Project_Rinn/assets/blacksmith_shop.png")
+local tex_pub = load_texture("D:/cs/vs/Project_Rinn/assets/pub.png")
+print("加载贴图: blacksmith_shop = " .. tex_shop .. ", pub = " .. tex_pub)
 
--- 2. 测试组件添加 (使用 table 语法)
-print("\n[Test 2] 添加 Transform 组件...")
-for i = 1, 5 do
-    emplace_Transform(entities[i], {x = i * 100.0, y = i * 50.0})
-    print("  实体 #" .. i .. " 添加 Transform: x=" .. (i * 100) .. ", y=" .. (i * 50))
-end
+-- 2. 创建实体并添加组件
+local e1 = create_entity()
+emplace_Transform(e1, {x = 100, y = 100})
+emplace_Sprite(e1, {texture_id = tex_shop, width = 128, height = 128})
+print("创建实体 e1: blacksmith_shop @ (100, 100)")
 
--- 3. 测试组件添加 - Velocity
-print("\n[Test 3] 添加 Velocity 组件...")
-for i = 1, 5 do
-    emplace_Velocity(entities[i], {vx = i * 2.0, vy = i * 1.0})
-    print("  实体 #" .. i .. " 添加 Velocity: vx=" .. (i * 2) .. ", vy=" .. i)
-end
+local e2 = create_entity()
+emplace_Transform(e2, {x = 400, y = 200})
+emplace_Sprite(e2, {texture_id = tex_pub, width = 256, height = 256})
+print("创建实体 e2: pub @ (400, 200)")
 
--- 4. 测试 has 检查
-print("\n[Test 4] 检查组件存在性...")
-for i = 1, 5 do
-    local hasT = has_Transform(entities[i])
-    local hasV = has_Velocity(entities[i])
-    print("  实体 #" .. i .. ": has_Transform=" .. tostring(hasT) .. ", has_Velocity=" .. tostring(hasV))
-end
-
--- 5. 测试 get 获取组件
-print("\n[Test 5] 获取组件数据...")
-for i = 1, 3 do
-    local t = get_Transform(entities[i])
-    local v = get_Velocity(entities[i])
-    print("  实体 #" .. i .. ": Transform(" .. t.x .. ", " .. t.y .. "), Velocity(" .. v.vx .. ", " .. v.vy .. ")")
-end
-
--- 6. 测试 remove 删除组件
-print("\n[Test 6] 删除组件测试...")
-remove_Velocity(entities[1])
-print("  已删除实体 #1 的 Velocity")
-print("  实体 #1 has_Velocity = " .. tostring(has_Velocity(entities[1])))
-print("  实体 #2 has_Velocity = " .. tostring(has_Velocity(entities[2])))
-
--- 7. 测试实体销毁
-print("\n[Test 7] 销毁实体测试...")
-destroy_entity(entities[5])
-print("  已销毁实体 #5")
-print("  实体 #5 is_alive = " .. tostring(is_alive(entities[5])))
-print("  实体 #4 is_alive = " .. tostring(is_alive(entities[4])))
-
-print("\n========== Lua 脚本测试完成 ==========\n")
+print("=== 初始化完成，等待渲染 ===")
