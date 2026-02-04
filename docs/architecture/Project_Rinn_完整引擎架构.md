@@ -65,8 +65,9 @@
 |------|------|----------|
 | **ECS Core** | Entity/Component/System 架构 | ✅ 100% |
 | **ResourceManager** | 纹理/Shader/音频资源池 | ⚠️ 30% (仅纹理) |
+| **PrefabManager** | 实体模板生成 | ✅ 100% |
 | **EventBus** | 系统间解耦通信 | ❌ 未实现 |
-| **SceneManager** | 场景切换、预制体 | ❌ 未实现 |
+| **SceneManager** | 场景切换 | ❌ 未实现 |
 | **Serialization** | 存档/读档、JSON 序列化 | ❌ 未实现 |
 
 ---
@@ -77,13 +78,13 @@
 
 | System | 职责 | 输入组件 | 输出 | 状态 |
 |--------|------|----------|------|------|
-| **InputSystem** | 键盘/鼠标/手柄 | - | 事件/状态查询 | ❌ |
-| **PhysicsSystem** | 速度 → 位置更新 | `Transform`, `Velocity` | 位置变化 | ❌ |
+| **InputSystem** | 键盘/鼠标/手柄 | - | 事件/状态查询 | ✅ 100% |
+| **PhysicsSystem** | 速度 → 位置更新 | `Transform`, `Velocity` | 位置变化 | ✅ 100% |
 | **CollisionSystem** | 碰撞检测 | `Transform`, `Collider` | 碰撞事件 | ❌ |
 | **RenderSystem** | 绘制 Sprite | `Transform`, `Sprite` | 画面 | ⚠️ 基础 |
 | **AudioSystem** | 音效/BGM | `AudioSource` | 声音 | ❌ |
 | **AnimationSystem** | 序列帧动画 | `Animator`, `Sprite` | UV 切换 | ❌ |
-| **ScriptSystem** | 执行 Lua 逻辑 | `Script` | 状态变化 | ⚠️ 85% |
+| **ScriptSystem** | 执行 Lua 意图 | - | 意图声明 | ✅ 100% |
 
 #### 高级能力 🟡
 

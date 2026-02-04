@@ -48,8 +48,11 @@ namespace Rinn {
 
 			assert(entity.index() < MAX_ENTITIES && "Entity out of range!");
 
-			if (Sparse[entity.index()] != NULL_COMPONENT_ENTITY)
+			// 如果组件已存在，返回现有引用（不替换）
+			// 组件更新应通过 get() 获取引用后直接修改
+			if (Sparse[entity.index()] != NULL_COMPONENT_ENTITY) {
 				return Dense[Sparse[entity.index()]];
+			}
 			
 
 			// 安全：异常安全 
