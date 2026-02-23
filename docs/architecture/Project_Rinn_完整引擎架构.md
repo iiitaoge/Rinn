@@ -4,6 +4,35 @@
 
 ---
 
+## 设计铁律
+
+> 一切架构决策必须通过这三条铁律审核
+
+### 铁律一：CPU 痛恨内存跳转
+- ✅ 组件存于 `SparseSet.Dense`（连续内存）
+- ✅ 遍历使用 `view<T>()` 线性扫描
+- ❌ 禁止: 指针追逐、虚函数热路径遍历
+
+### 铁律二：显式 Pipeline
+- ✅ 所有 System 调用顺序在 `main.cpp` 中硬编码
+- ✅ `World` 是纯 struct，无任何方法
+- ✅ System 是 namespace + 自由函数
+- ❌ 禁止: EventBus、Callbacks、任何隐式控制流
+
+### 铁律三：复杂度物理限制
+- ✅ O(N) 优先
+- ⚠️ O(N²) 仅限 N < 50
+- 🔴 N > 50 必须空间划分
+
+### 三层数据模型
+| 层级 | 内容 | 存储 |
+|------|------|------|
+| **实体层** | 动态组件 (Transform, Velocity) | Registry (SparseSet) |
+| **环境层** | 静态地图 (TileMap) | Dense Array |
+| **上下文层** | 全局状态 (time, dt) | World.ctx |
+
+---
+
 ## 引擎愿景
 
 构建一个基于 C++20 的 **HD-2D 风格系统性涌现引擎**，特点：
@@ -43,8 +72,8 @@
 │  │  │  ECS: Registry / SparseSet / View / EntityPool           │   │ │
 │  │  └──────────────────────────────────────────────────────────┘   │ │
 │  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐            │ │
-│  │  │ Resource │ │  Event   │ │  Scene   │ │ Serialize│            │ │
-│  │  │ Manager  │ │   Bus    │ │ Manager  │ │  System  │            │ │
+│  │  │ Resource │ │  World   │ │  Scene   │ │ Serialize│            │ │
+│  │  │ Manager  │ │ (struct) │ │ Manager  │ │  System  │            │ │
 │  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘            │ │
 │  └─────────────────────────────────────────────────────────────────┘ │
 │                                  ▼                                   │
@@ -66,7 +95,7 @@
 | **ECS Core** | Entity/Component/System 架构 | ✅ 100% |
 | **ResourceManager** | 纹理/Shader/音频资源池 | ⚠️ 30% (仅纹理) |
 | **PrefabManager** | 实体模板生成 | ✅ 100% |
-| **EventBus** | 系统间解耦通信 | ❌ 未实现 |
+| **World** | 纯数据容器 (struct, 无方法) | ✅ 100% |
 | **SceneManager** | 场景切换 | ❌ 未实现 |
 | **Serialization** | 存档/读档、JSON 序列化 | ❌ 未实现 |
 
@@ -80,7 +109,7 @@
 |--------|------|----------|------|------|
 | **InputSystem** | 键盘/鼠标/手柄 | - | 事件/状态查询 | ✅ 100% |
 | **PhysicsSystem** | 速度 → 位置更新 | `Transform`, `Velocity` | 位置变化 | ✅ 100% |
-| **CollisionSystem** | 碰撞检测 | `Transform`, `Collider` | 碰撞事件 | ❌ |
+| **CollisionSystem** | 碰撞检测+解决 | `Transform`, `Collider` | 位置修正 | ✅ 100% |
 | **RenderSystem** | 绘制 Sprite | `Transform`, `Sprite` | 画面 | ⚠️ 基础 |
 | **AudioSystem** | 音效/BGM | `AudioSource` | 声音 | ❌ |
 | **AnimationSystem** | 序列帧动画 | `Animator`, `Sprite` | UV 切换 | ❌ |
@@ -195,11 +224,12 @@ Project_Rinn/
 │   │   ├── ShaderManager.hpp    # ❌
 │   │   └── AudioManager.hpp     # ❌
 │   │
-│   ├── Scripting/               # Lua 绑定 ⚠️
+│   ├── Scripting/               # Lua 绑定 ✅
 │   │   ├── ScriptContext.hpp
 │   │   ├── LuaBinder.hpp
-│   │   ├── ComponentTraits.hpp
-│   │   └── ComponentList.hpp
+│   │   ├── TileMapBindings.hpp
+│   │   ├── CollisionBindings.hpp
+│   │   └── RenderBindings.hpp
 │   │
 │   ├── components/              # 组件定义
 │   │   └── Components.hpp       # ⚠️ 基础
@@ -207,9 +237,6 @@ Project_Rinn/
 │   ├── Scene/                   # 场景管理 ❌
 │   │   ├── SceneManager.hpp
 │   │   └── Prefab.hpp
-│   │
-│   ├── Events/                  # 事件系统 ❌
-│   │   └── EventBus.hpp
 │   │
 │   └── main.cpp                 # 入口
 │

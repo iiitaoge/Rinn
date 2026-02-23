@@ -10,45 +10,43 @@
 //   - C++ 层只做最薄的 Raylib API 封装
 // ============================================================================
 
-namespace Rinn {
-    namespace Input {
+namespace Rinn::InputSystem {
 
-        // ====================================================================
-        // 键盘 API（直接传 int 键码，零开销）
-        // ====================================================================
-        [[nodiscard]] inline bool is_key_down(int key) { 
-            return IsKeyDown(key); 
-        }
+    // ====================================================================
+    // 键盘 API（直接传 int 键码，零开销）
+    // ====================================================================
+    [[nodiscard]] inline bool is_key_down(int key) { 
+        return IsKeyDown(key); 
+    }
 
-        [[nodiscard]] inline bool is_key_pressed(int key) { 
-            return IsKeyPressed(key); 
-        }
+    [[nodiscard]] inline bool is_key_pressed(int key) { 
+        return IsKeyPressed(key); 
+    }
 
-        [[nodiscard]] inline bool is_key_released(int key) { 
-            return IsKeyReleased(key); 
-        }
+    [[nodiscard]] inline bool is_key_released(int key) { 
+        return IsKeyReleased(key); 
+    }
 
-        // ====================================================================
-        // 鼠标 API
-        // ====================================================================
-        [[nodiscard]] inline float get_mouse_x() { 
-            return GetMousePosition().x; 
-        }
+    // ====================================================================
+    // 鼠标 API
+    // ====================================================================
+    [[nodiscard]] inline float get_mouse_x() { 
+        return GetMousePosition().x; 
+    }
 
-        [[nodiscard]] inline float get_mouse_y() { 
-            return GetMousePosition().y; 
-        }
+    [[nodiscard]] inline float get_mouse_y() { 
+        return GetMousePosition().y; 
+    }
 
-        [[nodiscard]] inline bool is_mouse_down(int button) { 
-            return IsMouseButtonDown(button); 
-        }
+    [[nodiscard]] inline bool is_mouse_down(int button) { 
+        return IsMouseButtonDown(button); 
+    }
 
-        [[nodiscard]] inline bool is_mouse_pressed(int button) { 
-            return IsMouseButtonPressed(button); 
-        }
+    [[nodiscard]] inline bool is_mouse_pressed(int button) { 
+        return IsMouseButtonPressed(button); 
+    }
 
-        [[nodiscard]] inline bool is_mouse_released(int button) { 
-            return IsMouseButtonReleased(button); 
-        }
+    [[nodiscard]] inline bool is_mouse_released(int button) { 
+        return IsMouseButtonReleased(button); 
     }
 }

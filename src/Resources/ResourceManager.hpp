@@ -6,7 +6,7 @@
 #include <cassert>
 namespace Rinn {
     class ResourceManager {
-        std::vector<Texture2D> textures;
+        std::vector<Texture2D> textures;    // 纹理资源
         std::unordered_map<std::string, uint16_t> path_to_id;  // 路径 → ID 映射
     public:
         uint16_t load_texture(const std::string& path);  // 返回 ID

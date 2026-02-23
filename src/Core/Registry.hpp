@@ -2,6 +2,13 @@
 #include "Types.hpp"
 #include "SparseSet.hpp"
 #include "ComponentID.hpp"
+#include "iostream"
+
+#ifdef _MSC_VER
+#include <intrin.h>   // _mm_prefetch
+#else
+#include <xmmintrin.h>
+#endif
 
 namespace Rinn {
 
@@ -130,6 +137,12 @@ namespace Rinn {
 		}
 	public:
 		Registry(){}
+
+		// ⭐ System 直接访问类型化组件池（用于 raw_data() 线性遍历）
+		// 使用场景：PhysicsSystem 等需要批量处理全部组件的 System
+		// 约束：遍历期间不得增删该类型的组件
+		template<typename T>
+		[[nodiscard]] SparseSet<T>& pool() { return get_pool<T>(); }
 
 		// 提供一个辅助函数，返回 View 对象
 		template<typename... Components>
@@ -268,11 +281,17 @@ namespace Rinn {
 		const Entity* cached_entities;  // 直接指向 dense_to_entity.data()
 		size_t cached_size;
 		
-		Signature required_signature;	 // 需要的组件签名 实现 O(1)遍历
+		// ⭐ 替代 128KB entity_signatures: 仅缓存非最小池指针
+		// View<Transform, Velocity> 只需检查 1 个额外池的 Sparse (32KB)
+		// 而非扫描 128KB 的签名数组 → 工作集从 192KB 降至 64KB
+		static constexpr size_t POOL_COUNT = sizeof...(Components);
+		std::array<ISparseSet*, POOL_COUNT> other_pools{};
+		size_t other_count = 0;
+
 	public:
 		View(Registry& r) : reg(r), smallest_pool(nullptr), cached_entities(nullptr), cached_size(0) {
 			find_smallest();  // 构造函数体内调用
-			build_signature();	// 构造签名
+			cache_other_pools();	// 缓存非最小池指针
 			
 			// ⭐ 只在构造时调用一次虚函数，之后遍历全部走裸指针
 			if (smallest_pool) {
@@ -309,18 +328,15 @@ namespace Rinn {
 			}
 
 			// 判断实体是否合法
+			// ⭐ 核心优化: 直接查各池的 Sparse 数组 (各 32KB)
+			//    不再触碰 128KB 的 entity_signatures
+			//    且 has() 加载的 Cache Line 会被后续 get<T>() 复用 → 免费预取
 			bool is_valid() const {
-				// ⭐ 直接数组访问，无虚函数调用！
 				Entity candidate = view.cached_entities[index];
-				Signature entity_sig = view.reg.entity_signatures[candidate.index()];
-
-				// 逻辑核心：
-				// 1. entity_sig & required_signature 
-				//    -> 过滤出实体身上符合要求的那些组件。
-				// 2. ... == required_signature 
-				//    -> 检查过滤出来的结果，是否完完整整等于我要求的全部。
-
-				return (entity_sig & view.required_signature) == view.required_signature;
+				for (size_t i = 0; i < view.other_count; ++i) {
+					if (!view.other_pools[i]->has(candidate)) return false;
+				}
+				return true;
 			}
 
 			// 核心：前进一步
@@ -360,12 +376,17 @@ namespace Rinn {
 				}(), ...);
 		}
 
-		// 构造所需签名
-		void build_signature() {
-			(required_signature.set(get_component_type_id<Components>()), ...);
+		// 缓存非最小池指针 (替代 build_signature)
+		// 构造时执行一次, 遍历时零开销
+		void cache_other_pools() {
+			other_count = 0;
+			([&] {
+				ISparseSet* pool = &reg.get_pool<Components>();
+				if (pool != smallest_pool) {
+					other_pools[other_count++] = pool;
+				}
+			}(), ...);
 		}
 
 	};
 }
-
-

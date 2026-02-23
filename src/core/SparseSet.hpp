@@ -1,5 +1,10 @@
 #pragma once
 #include"Types.hpp"
+#ifdef _MSC_VER
+#include <intrin.h>     // MSVC: _mm_prefetch
+#else
+#include <immintrin.h>
+#endif
 
 namespace Rinn {
 	class ISparseSet {
@@ -139,6 +144,38 @@ namespace Rinn {
 		// ⭐ 新增：返回实体数组指针，供 View 缓存使用
 		[[nodiscard]] const Entity* entity_data() const noexcept override {
 			return dense_to_entity.data();
+		}
+
+		// ⭐ 场景级预分配：一次性付清 Page Fault / TLB Miss 成本
+		void reserve(size_t cap) {
+			Dense.reserve(cap);
+			dense_to_entity.reserve(cap);
+		}
+
+		// ⭐ 直接暴露 Dense 数组指针，System 可绕过 Sparse 间接寻址
+		// 使用场景：当 System 需要线性遍历全部组件（不需要按 Entity 查找）
+		// 安全性：调用者必须保证不增删组件（遍历期间 Dense 不 resize）
+		[[nodiscard]] T* raw_data() noexcept { return Dense.data(); }
+		[[nodiscard]] const T* raw_data() const noexcept { return Dense.data(); }
+
+		[[nodiscard]] Entity* raw_entity_data() noexcept { return dense_to_entity.data(); }
+		[[nodiscard]] const Entity* raw_entity_data() const noexcept { return dense_to_entity.data(); }
+
+		// 软件预取：提前将某实体的 Sparse→Dense 路径加载到 L1
+		// 在热循环中对 i+PREFETCH_DIST 的实体调用，隐藏 L2 延迟
+		void prefetch(Entity entity) const noexcept {
+			auto idx = entity.index();
+			// 阶段1: 预取 Sparse 条目 (2 bytes, 但会加载整条 Cache Line)
+			_mm_prefetch(reinterpret_cast<const char*>(&Sparse[idx]), _MM_HINT_T0);
+		}
+
+		// 两阶段预取: 当 Sparse 值已知时，预取 Dense 条目
+		void prefetch_dense(Entity entity) const noexcept {
+			auto idx = entity.index();
+			auto dense_idx = Sparse[idx];
+			if (dense_idx != NULL_COMPONENT_ENTITY) {
+				_mm_prefetch(reinterpret_cast<const char*>(&Dense[dense_idx]), _MM_HINT_T0);
+			}
 		}
 
 		// 为System准备的迭代器 

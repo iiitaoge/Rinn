@@ -1,0 +1,143 @@
+---
+description: Project Rinn 引擎开发规则 - 所有涉及此项目的对话自动加载
+globs:
+  - "src/**"
+  - "scripts/**"
+  - "tests/**"
+  - "CMakeLists.txt"
+---
+
+# Project Rinn - C++20 ECS 游戏引擎
+
+## 项目身份
+
+- **目标**: HD-2D 风格系统性涌现玩法引擎
+- **核心哲学**: Data-Oriented Design (DOD)，**不是** OOP
+- **技术栈**: C++20 / Handmade ECS (Sparse Set) / Lua 5.4 + Sol2 / Raylib 5.5
+- **当前阶段**: Phase 1 (~30%) — 可玩基础 (Input → Physics → Collision → Render)
+- **构建系统**: CMake 3.28+，FetchContent 拉取 Raylib/GoogleTest，本地 Lua+Sol2 在 `external/`
+
+## 架构铁律（违反即拒绝）
+
+### 1. ECS 数据驱动
+- **Entity** = 32位值类型 Handle `[Generation(16) | Index(16)]`，按值传递
+- **Component** = 纯 POD 聚合体 struct，无虚函数、无构造函数、无继承
+- **System** = `namespace + inline 自由函数`，**无状态**，接收 `Registry&` 或 `World&`
+- **World** = 纯数据 struct，**零方法**（CollisionCache::clear 是唯一例外）
+- **禁止**: `class Player : public Entity` ❌ / System 持有成员变量 ❌ / 组件间引用 ❌
+
+### 2. C++20 严格
+- 模板必须用 `concept` 或 `requires` 约束
+- 禁止裸循环 `for(int i=0;...)` → 用 range-based for 或 `std::ranges`
+- 禁止裸指针资源管理 → RAII (`unique_ptr` / Handle)
+- 高频 System 中禁止 `virtual` 调用（View 遍历路径已通过指针缓存消除虚函数）
+- 只读参数 `const T&`，不修改成员的方法标 `const`
+- 使用 `[[nodiscard]]` 标注返回值不应忽略的函数
+
+### 3. Lua 脚本安全
+- C++ 负责**机制** (Mechanism)，Lua 负责**策略** (Policy)
+- Lua 只能声明**意图**（如 `move(e, "up", 200)`），不能直接修改组件
+- 所有 Lua 调用必须经过 `LuaSandbox` 的 `safe_call` 系列函数，**禁止裸 `lua.script()`**
+- 三级权限: Core（完整访问）> Mod（无 spawn/destroy）> Untrusted（只读查询）
+
+### 4. 曳光弹法则
+- 新功能必须闭环: `Input → Logic → State Change → Render → Visual Debug`
+- 如果一个系统看不见，它就不存在
+
+## 文件结构与命名
+
+```
+src/
+├── Core/           # ECS 核心: Types.hpp, ComponentID.hpp, SparseSet.hpp, Registry.hpp (含 EntityPool + View), World.hpp, EventQueues.hpp, Concepts.hpp
+├── Systems/        # namespace + 自由函数: PhysicsSystem, CollisionSystem, RenderSystem, InputSystem
+├── Scripting/      # Lua 绑定: ScriptContext.hpp (沙箱集成), LuaBinder.hpp (权限分级 API), LuaSandbox.hpp, *Bindings.hpp
+├── Resources/      # 资源管理: ResourceManager.hpp, PrefabManager.hpp, TileMap.hpp
+├── components/     # 组件定义: Components.hpp (Transform, Sprite, Velocity, Collider + Tag 组件)
+└── main.cpp        # 显式 Pipeline 编排
+
+tests/              # Google Test 单元测试
+scripts/            # Lua 游戏脚本
+assets/             # 纹理资源
+docs/               # 架构文档、Code Bible、审计报告
+```
+
+## 核心数据结构速查
+
+| 概念 | 实现 | 位置 |
+|------|------|------|
+| Entity Handle | `uint32_t id` = [gen(16)\|idx(16)] | `Types.hpp` |
+| 组件存储 | Sparse Set (固定 32KB Sparse + 动态 Dense vector) | `SparseSet.hpp` |
+| 组件 ID | 模板静态变量 + 全局原子计数器 | `ComponentID.hpp` |
+| 实体池 | 环形缓冲区 + Generation 数组 | `Registry.hpp::EntityPool` |
+| 签名 | `std::bitset<64>` (8字节) | `Types.hpp` |
+| View 查询 | 最小池驱动 + 签名位运算过滤 + 指针缓存 | `Registry.hpp::View` |
+| 事件系统 | 类型化队列 `EventQueues`，`std::span` 零拷贝读取 | `EventQueues.hpp` |
+| 沙箱 | 自定义内存分配器 + 指令计数 Hook + 权限分级 | `LuaSandbox.hpp` |
+
+## 常量
+
+- `MAX_ENTITIES = 16384` (16K)
+- `MAX_COMPONENTS = 64`
+- `MAX_EVENT_TYPES = 64`
+- `Entity NULL_ID = 0xFFFFFFFF`
+- `NULL_COMPONENT_ENTITY = 0xFFFF`
+
+## 主循环 Pipeline（每帧执行顺序）
+
+```
+events.clear_all()              → 清理上一帧事件
+CollisionSystem::SavePositions  → 保存旧位置快照
+Lua on_update(dt)               → 脚本设置速度意图（沙箱保护）
+PhysicsSystem::Update           → 速度积分 → 位置
+CollisionSystem::Resolve        → TileMap 碰撞 + 实体 AABB 碰撞
+RenderSystem::BeginFrame        → 开始绘制
+  DrawTileMap                   → 环境层
+  Lua on_render()               → 自定义绘制（沙箱保护）
+  DrawSprites                   → 实体精灵
+  DrawText (FPS)                → UI
+RenderSystem::EndFrame          → 提交帧
+```
+
+## 已知技术债（修改代码时需注意）
+
+1. **ResourceManager 析构顺序 bug**: `~ResourceManager` 在 `CloseWindow()` 后执行，`UnloadTexture` 操作已关闭的 GPU 上下文
+2. **CollisionSystem O(N²)**: 动态碰撞暴力检测，>100 实体帧率下降
+3. **CheckTile 只检查四角**: 碰撞盒 > 2×tile_size 时可穿墙
+4. **Header-only 架构**: 所有代码在 .hpp 中，改底层类型触发全量重编译
+5. **View 迭代中增删实体**: 缓存的裸指针会悬挂，当前无 assert 警告
+6. **texture_id = 0 歧义**: 既是"无纹理"又是第一个合法 ID
+7. **脚本路径硬编码**: `D:/cs/vs/Project_Rinn/scripts/test.lua`
+8. **TileMap 负坐标截断**: `static_cast<int>` 对负数截断方向错误
+
+## 新增组件的 Checklist
+
+1. 在 `Components.hpp` 中定义纯 POD struct（无 ctor/virtual/private）
+2. 添加 `static_assert` 验证: `is_aggregate_v` + `is_trivially_copyable_v`（数据组件）或 `is_empty_v`（标签组件）
+3. 如需 Lua 访问: 在 `LuaBinder.hpp` 中添加查询/意图函数，遵守权限矩阵
+4. 如需序列化: 确保满足 `SerializableComponent` concept（`Concepts.hpp`）
+
+## 新增 System 的 Checklist
+
+1. 创建 `Systems/XxxSystem.hpp`
+2. 使用 `namespace Rinn::XxxSystem { inline void Update(Registry& reg, float dt) { ... } }`
+3. 在 `main.cpp` Pipeline 中插入调用（注意顺序依赖）
+4. System 必须**无状态**，工作缓存放 `World` 或 System 内 static 变量
+
+## 新增事件的 Checklist
+
+1. 在 `World.hpp` 的事件定义区定义 POD struct（必须 trivially copyable）
+2. 产生: `world.events.push<MyEvent>({...})`
+3. 消费: `for (auto& e : world.events.read<MyEvent>()) { ... }`
+4. 生命周期: 帧开始 `clear_all()`，事件只活一帧
+
+## Review 四维度（代码审查标准）
+
+1. **内存布局**: 数据连续？Cache 友好？对齐浪费？
+2. **指令流**: 热路径有虚函数？分支可预测？可向量化？
+3. **数据生命周期**: 所有权清晰？const 正确？无冗余拷贝？
+4. **绑定时机**: 运行时计算能否左移到编译期？动态多态能否改静态？
+
+## 语言
+
+- 代码注释: 中文或英文均可
+- 与用户对话: **始终使用简体中文**

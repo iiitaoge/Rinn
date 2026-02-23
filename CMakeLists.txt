@@ -53,12 +53,14 @@ add_executable(${PROJECT_NAME}
     src/Core/Registry.hpp
     src/Core/SparseSet.hpp
     src/Core/Types.hpp
-    src/components/Components.hpp
+    src/Components/Components.hpp
     src/Scripting/ScriptContext.hpp
     src/Scripting/LuaBinder.hpp
-    src/Scripting/ComponentList.hpp
-    src/Scripting/ComponentTraits.hpp
     src/Resources/ResourceManager.hpp
+    src/Systems/RenderSystem.hpp
+    src/Systems/InputSystem.hpp
+    src/Systems/PhysicSystem.hpp
+    src/Systems/CollisionSystem.hpp
 )
 
 # Include 路径：让 #include <Core/xxx> 能找到
@@ -79,4 +81,34 @@ if(MSVC)
 
     /wd5321     # 忽略Sol2警告
     )
+endif()
+
+# =========================================================
+# 5. 单元测试 (可选，cmake -DBUILD_TESTS=ON ..)
+# =========================================================
+option(BUILD_TESTS "Build ECS unit tests with Google Test" OFF)
+
+if(BUILD_TESTS)
+    enable_testing()
+
+    FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG        v1.15.2
+    )
+    # MSVC: 使用动态 CRT，避免链接冲突
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+
+    add_executable(ecs_tests tests/ecs_test.cpp)
+
+    target_include_directories(ecs_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(ecs_tests PRIVATE GTest::gtest_main)
+
+    if(MSVC)
+        target_compile_options(ecs_tests PRIVATE /W4 /permissive- /utf-8)
+    endif()
+
+    include(GoogleTest)
+    gtest_discover_tests(ecs_tests)
 endif()
