@@ -8,6 +8,8 @@
 #include "Systems/InputSystem.hpp"
 #include "Systems/PhysicSystem.hpp"
 #include "Systems/CollisionSystem.hpp"
+#include "rlImGui.h"
+#include "imgui.h"
 
 using namespace::Rinn;
 
@@ -27,6 +29,7 @@ int main() {
 	}
 
 	RenderSystem::Init(1600, 1400, "Rinn");
+	rlImGuiSetup(true);
 	
 	while (!RenderSystem::ShouldClose()) {
 		RenderSystem::BeginFrame();
@@ -45,6 +48,12 @@ int main() {
 			RenderSystem::DrawRectFilled(t.x, t.y, 20, 20, BLUE);
 			DrawText(std::format("{}", e.index()).c_str(), (int)t.x + 18, (int)t.y + 15, 20, RED);
 		}
+
+		rlImGuiBegin();
+		ImGui::Begin("Test");
+		ImGui::Text("Hello ImGui!");
+		ImGui::End();
+		rlImGuiEnd();
 
 		RenderSystem::EndFrame();
 	}

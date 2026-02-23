@@ -14,7 +14,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(FetchContent)
 FetchContent_Declare(
     raylib
-    GIT_REPOSITORY https://gitee.com/mirrors/raylib.git
+    GIT_REPOSITORY https://github.com/raysan5/raylib.git
     GIT_TAG        5.5
 )
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -45,6 +45,19 @@ target_include_directories(sol2 INTERFACE "${CMAKE_SOURCE_DIR}/external/sol2/inc
 target_link_libraries(sol2 INTERFACE liblua)
 
 # =========================================================
+# 引入 Dear ImGui + rlImGui (raylib 桥接)
+# =========================================================
+FetchContent_Declare(imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG master
+)
+FetchContent_Declare(rlImGui
+    GIT_REPOSITORY https://github.com/raylib-extras/rlImGui.git
+    GIT_TAG main
+)
+FetchContent_MakeAvailable(imgui rlImGui)
+
+# =========================================================
 # 4. 你的项目配置
 # =========================================================
 add_executable(${PROJECT_NAME}
@@ -61,10 +74,24 @@ add_executable(${PROJECT_NAME}
     src/Systems/InputSystem.hpp
     src/Systems/PhysicSystem.hpp
     src/Systems/CollisionSystem.hpp
+
+    # Dear ImGui 核心源文件
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+
+    # rlImGui 桥接
+    ${rlimgui_SOURCE_DIR}/rlImGui.cpp
 )
 
-# Include 路径：让 #include <Core/xxx> 能找到
-target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/src)
+# Include 路径
+target_include_directories(${PROJECT_NAME} PRIVATE 
+    ${CMAKE_SOURCE_DIR}/src
+    ${imgui_SOURCE_DIR}
+    ${rlimgui_SOURCE_DIR}
+)
 
 # 链接库 (Raylib + Sol2 + Lua)
 target_link_libraries(${PROJECT_NAME} PRIVATE 

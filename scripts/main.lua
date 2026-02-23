@@ -8,6 +8,14 @@ set(player, "Velocity", {x = 0, y = 0})
 set(player, "Collider", {width = 50, height = 50})
 
 
+local npc = {}
+
+for i=1,5 do
+	npc[i] = create_entity()
+    set(player, "Transform", {x = 100, y = 200})
+    set(player, "Velocity", {x = 0, y = 0})
+    set(player, "Collider", {width = 50, height = 50})
+end
 
 -- 定义每帧逻辑（被 C++ 每帧调用）
 function on_update()
