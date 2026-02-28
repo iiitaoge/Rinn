@@ -90,14 +90,14 @@
 
 ### Tier 0: Core Layer (核心层)
 
-| 模块 | 职责 | 当前状态 |
-|------|------|----------|
-| **ECS Core** | Entity/Component/System 架构 | ✅ 100% |
-| **ResourceManager** | 纹理/Shader/音频资源池 | ⚠️ 30% (仅纹理) |
-| **PrefabManager** | 实体模板生成 | ✅ 100% |
-| **World** | 纯数据容器 (struct, 无方法) | ✅ 100% |
-| **SceneManager** | 场景切换 | ❌ 未实现 |
-| **Serialization** | 存档/读档、JSON 序列化 | ❌ 未实现 |
+| 模块                  | 职责                         | 当前状态         |
+| ------------------- | -------------------------- | ------------ |
+| **ECS Core**        | Entity/Component/System 架构 | ✅ 100%       |
+| **ResourceManager** | 纹理/Shader/音频资源池            | ⚠️ 30% (仅纹理) |
+| **PrefabManager**   | 实体模板生成                     | ✅ 100%       |
+| **World**           | 纯数据容器 (struct, 无方法)        | ✅ 100%       |
+| **SceneManager**    | 场景切换                       | ❌ 未实现        |
+| **Serialization**   | 存档/读档、JSON 序列化             | ❌ 未实现        |
 
 ---
 
@@ -145,14 +145,14 @@ Shadow Pass → Main Pass → Volumetric Pass → Post-Process → UI
  ShadowMap   SceneColor+Depth  VolumetricBuffer  Final
 ```
 
-| 渲染模块 | 职责 | 状态 |
-|----------|------|------|
-| **Shader 系统** | GLSL 加载/管理 | ❌ |
-| **法线贴图渲染** | 2D Sprite 立体感 | ❌ |
-| **光照系统** | 多光源实时光照 | ❌ |
-| **阴影映射** | Shadow Map + PCF | ❌ |
-| **后期特效** | Bloom/Tilt-Shift/LUT | ❌ |
-| **体积光** | God Rays | ❌ (可选) |
+| 渲染模块          | 职责                   | 状态     |
+| ------------- | -------------------- | ------ |
+| **Shader 系统** | GLSL 加载/管理           | ❌      |
+| **法线贴图渲染**    | 2D Sprite 立体感        | ❌      |
+| **光照系统**      | 多光源实时光照              | ❌      |
+| **阴影映射**      | Shadow Map + PCF     | ❌      |
+| **后期特效**      | Bloom/Tilt-Shift/LUT | ❌      |
+| **体积光**       | God Rays             | ❌ (可选) |
 
 ---
 
