@@ -15,20 +15,21 @@ using namespace::Rinn;
 int main() {
 
 
+	RenderSystem::Init(1600, 1400, "Rinn");
+	DebugUI::Init();
+
 	Registry reg;
+	ResourceManager res;
+
 	sol::state lua;
 	Init_lua(lua);
-	bind(lua, reg);
-	auto result = lua.script_file("../../../scripts/main.lua");	// 路径跟exe位置有关
-
+	bind(lua, reg, res);
+	auto result = lua.script_file("../../../scripts/main.lua");
 
 	if (!result.valid()) {
 		sol::error err = result;
 		std::cerr << "加载脚本失败: " << err.what() << std::endl;
 	}
-
-	RenderSystem::Init(1600, 1400, "Rinn");
-	DebugUI::Init();
 	
 	while (!RenderSystem::ShouldClose()) {
 		RenderSystem::BeginFrame();
@@ -42,14 +43,13 @@ int main() {
 			std::cout << std::format("Collision: {} <-> {}\n", h.a.index(), h.b.index());
 		}
 		CollisionSystem::resolve(reg, hits);
-		for (Entity e : reg.view<Rinn::Transform>()) {
-			Rinn::Transform& t = reg.get<Rinn::Transform>(e);
-			RenderSystem::DrawRectFilled(t.x, t.y, 20, 20, BLUE);
-			DrawText(std::format("{}", e.index()).c_str(), (int)t.x + 18, (int)t.y + 15, 20, RED);
-		}
+		RenderSystem::DrawSprites(reg, res);
 
 		DebugUI::Draw(reg);
 		RenderSystem::EndFrame();
 	}
+
+	res.unload_all();
+	RenderSystem::Shutdown();
 	return 0;
 }

@@ -155,7 +155,8 @@ namespace Rinn {
 		// ⭐ 直接暴露 Dense 数组指针，System 可绕过 Sparse 间接寻址
 		// 使用场景：当 System 需要线性遍历全部组件（不需要按 Entity 查找）
 		// 安全性：调用者必须保证不增删组件（遍历期间 Dense 不 resize）
-		[[nodiscard]] T* raw_data() noexcept { return Dense.data(); }
+
+		[[nodiscard]] T* raw_data() noexcept { return Dense.data(); }	// 头指针
 		[[nodiscard]] const T* raw_data() const noexcept { return Dense.data(); }
 
 		[[nodiscard]] Entity* raw_entity_data() noexcept { return dense_to_entity.data(); }

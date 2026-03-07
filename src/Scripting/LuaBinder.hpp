@@ -2,13 +2,18 @@
 #include <sol/sol.hpp>
 #include "../Core/Registry.hpp"
 #include "../Components/Components.hpp"
+#include "../Resources/ResourceManager.hpp"
 #include "../Systems/InputSystem.hpp"
 #include "../Systems/CollisionSystem.hpp"
 
 namespace Rinn {
-	inline void bind(sol::state& lua, Registry& reg) {
+	inline void bind(sol::state& lua, Registry& reg, ResourceManager& res) {
 
 		lua.new_usertype<Entity>("Entity");  // 纯黑盒，不暴露字段
+
+		lua.set_function("load_texture", [&res](const std::string& path) -> uint16_t {
+			return res.load_texture(path);
+		});
 		// 绑定 创建实体
 		lua.set_function("create_entity", [&reg]() { return reg.create_entity(); });
 		// 绑定 挂载组件
@@ -34,12 +39,6 @@ namespace Rinn {
 				reg.emplace<Rinn::Collider>(e,
 					data.get<float>("width"),
 					data.get<float>("height"));
-			}
-			else if (name == "Emotion") {
-				reg.emplace<Rinn::Emotion>(e,
-					data.get<float>("fear"),
-					data.get<float>("anger"),
-					data.get<float>("greed"));
 			}
 			});
 

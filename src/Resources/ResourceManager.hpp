@@ -12,12 +12,18 @@ namespace Rinn {
         uint16_t load_texture(const std::string& path);  // 返回 ID
         Texture2D& get_texture(uint16_t id);             // O(1) 查找
 
-        ~ResourceManager() {
-            // 1. 手动释放 Raylib 资源（C 库资源）
+        void unload_all() {
             for (auto& tex : textures) {
-                UnloadTexture(tex);  // ← 释放 GPU 显存
+                UnloadTexture(tex);
             }
+            textures.clear();
+            path_to_id.clear();
+        }
 
+        ~ResourceManager() {
+            if (!textures.empty()) {
+                unload_all();
+            }
         }
     };
 
