@@ -1,17 +1,28 @@
 -- 资源路径前缀
-local ASSET_DIR = "../../../assets/"
+local ASSET_DIR = "../../../assets/texture/"
 
 -- 加载地图数据
-local map = dofile("../../../scripts/map_data.lua")
+local texture_data = dofile("../../../scripts/texture_data.lua")
 
 -- 遍历数据，自动创建所有实体
 local player = nil
 
-for _, entry in ipairs(map) do
+for _, entry in ipairs(texture_data) do
     local tex = load_texture(ASSET_DIR .. entry.texture)
     local e = create_entity()
     set(e, "Transform", { x = entry.x, y = entry.y, layer = entry.layer})
-    set(e, "Sprite", { texture_id = tex, width = entry.w, height = entry.h })
+    set(e, "Sprite", { 
+        texture_id = tex, 
+        width = entry.w, height = entry.h, 
+    
+        -- 如果有配过截取区域就用，如果没配（nil），意味着想要使用一整张图：
+        -- 起点坐标默认为 0，截取的尺寸默认为贴图的全宽和全高。
+        src_x = entry.src_x or 0, 
+        src_y = entry.src_y or 0, 
+        src_w = entry.src_w or 0,  -- 传 0 给 C++，让 C++ 自己去拿 tex.width
+        src_h = entry.src_h or 0
+    })
+
 
     if entry.type == "player" then
         set(e, "Velocity", { x = 0, y = 0 })

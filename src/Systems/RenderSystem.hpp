@@ -115,8 +115,10 @@ namespace Rinn::RenderSystem {
 
             Texture2D& tex = res.get_texture(s.texture_id);
 
-            //               x起点  y起点    宽                高
-            Rectangle src = { 0.0f, 0.0f, (float)tex.width, (float)tex.height };
+            // 如果 Lua 没有指定截取宽/高 (等于0)，则默认使用整张图的原始宽/高
+            Rectangle src = { s.src_x, s.src_y, 
+                              s.src_w == 0 ? (float)tex.width : s.src_w, 
+                              s.src_h == 0 ? (float)tex.height : s.src_h };
 
             //               屏幕x  屏幕y   显示宽    显示高
             Rectangle dst = { t.x, t.y, s.width, s.height };

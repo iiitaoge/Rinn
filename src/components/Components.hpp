@@ -11,11 +11,18 @@ namespace Rinn{
         int layer = 0;  // ← 预留层级字段，但暂时不用 画的顺序决定了谁遮挡谁
     };
     // Sprite = Image + 行为能力
+    // Components.hpp
     struct Sprite {
-        uint16_t texture_id;  // 2 bytes - 索引到 ResourceManager
-        float width, height;
-        // 未来扩展：int animationFrame; 
+        size_t texture_id;    // 依然指代那一整张大图（Assets中的 TX Props.png）
+        float width, height;  // 最终画在屏幕上的大小
+
+        // 👇 新增截取信息（等于 json 中的从大图中切那一小块的坐标和尺寸）
+        float src_x = 0;
+        float src_y = 0;
+        float src_w = 0;
+        float src_h = 0;
     };
+
 
     struct Velocity {
         float vx, vy;

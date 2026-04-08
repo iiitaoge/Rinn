@@ -34,7 +34,7 @@ namespace Rinn {
 			else if (name == "Sprite") {
 				reg.emplace<Rinn::Sprite>(e,
 					static_cast<uint16_t>(data["texture_id"]),
-					data["width"], data["height"]);
+					data["width"], data["height"], data["src_x"], data["src_y"], data["src_w"], data["src_h"]);
 			}
 			else if (name == "Collider") {
 				reg.emplace<Rinn::Collider>(e,
