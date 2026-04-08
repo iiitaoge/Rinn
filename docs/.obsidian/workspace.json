@@ -13,15 +13,30 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "architecture/Project_Rinn_完整引擎架构.md",
+                "file": "annotated/src/Core/Types.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Project_Rinn_完整引擎架构"
+              "title": "Types"
+            }
+          },
+          {
+            "id": "002edc02d8e09358",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "planning/progress.md",
+                "mode": "preview",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "progress"
             }
           }
-        ]
+        ],
+        "currentTab": 1
       }
     ],
     "direction": "vertical"
@@ -183,6 +198,16 @@
       "bases:新建数据库": false
     }
   },
-  "active": "1a1d6a82890c8e0f",
-  "lastOpenFiles": []
+  "active": "002edc02d8e09358",
+  "lastOpenFiles": [
+    "annotated/src/Core/SparseSet.md",
+    "annotated/src/Components/Components.md",
+    "annotated/src/main.md",
+    "annotated/src/Core/ComponentID.md",
+    "annotated/src/Core/Types.md",
+    "annotated/src/Systems/CollisionSystem.md",
+    "annotated/src/DebugUI/DebugUI.md",
+    "annotated/src/Core/Registry.md",
+    "architecture/Project_Rinn_完整引擎架构.md"
+  ]
 }

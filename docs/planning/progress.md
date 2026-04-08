@@ -1053,3 +1053,183 @@ emplace_Sprite(e1, {texture_id = tex_shop, width = 128, height = 128})
 1. 最大解耦（Lua 不知道 Velocity 组件存在）
 2. 最高安全（无法穿墙/作弊）
 3. 性能提升 2.2x（无 table 创建）
+
+---
+
+## 📋 全项目审计快照 (2026-04-07)
+
+### 🔍 审计方法
+
+逐文件阅读全部源码、脚本、测试、构建配置，与上一次进度记录 (2026-02-04) 进行差异比对。
+
+---
+
+### 📂 当前文件清单
+
+#### C++ 源码 (`src/`, 14 文件, ~1281 行)
+
+| 模块 | 文件 | 行数 | 状态 |
+|------|------|------|------|
+| **入口** | `main.cpp` | 57 | ✅ 完整主循环 |
+| **Core** | `Types.hpp` | 87 | ✅ Entity Handle 32-bit |
+| | `ComponentID.hpp` | 24 | ✅ atomic 计数器 |
+| | `SparseSet.hpp` | 191 | ✅ prefetch + raw_data |
+| | `Registry.hpp` | 392 | ✅ EntityPool + View |
+| **Components** | `Components.hpp` | 69 | ✅ 4 数据 + 4 标签 |
+| **Systems** | `RenderSystem.hpp` | 129 | ✅ 层排序 + 中文字体 |
+| | `PhysicSystem.hpp` | 21 | ✅ 积分器 |
+| | `InputSystem.hpp` | 52 | ✅ 零开销封装 |
+| | `CollisionSystem.hpp` | 59 | ✅ AABB 检测 + 推开 |
+| **Scripting** | `ScriptContext.hpp` | 8 | ✅ 最小初始化 |
+| | `LuaBinder.hpp` | 76 | ✅ 混合 API |
+| **Resources** | `ResourceManager.hpp` | 51 | ✅ 幂等纹理加载 |
+| **DebugUI** | `DebugUI.hpp` | 65 | ✅ ImGui 实体检查器 |
+
+#### Lua 脚本 (`scripts/`, 3 文件, ~106 行)
+
+| 文件 | 行数 | 说明 |
+|------|------|------|
+| `main.lua` | 36 | 数据驱动实体创建 + WASD 输入 |
+| `map_data.lua` | 11 | 4 个实体定义 (player/npc/static) |
+| `Boids.lua` | 59 | Boids 三规则 (separation/alignment/cohesion) |
+
+#### 测试 (`tests/`, 4 文件, ~1526 行)
+
+| 文件 | 行数 | 说明 |
+|------|------|------|
+| `ecs_test.cpp` | 871 | GTest 单元测试，覆盖 SparseSet/Entity/View/System |
+| `cache_benchmark.cpp` | 244 | 缓存性能基准 |
+| `false_sharing_bench.cpp` | 228 | 伪共享基准 |
+| `pipeline_benchmark.cpp` | 183 | 管线吞吐基准 |
+
+#### 构建
+
+| 文件 | 行数 | 说明 |
+|------|------|------|
+| `CMakeLists.txt` | 142 | Raylib 5.5 + Lua(local) + Sol2(local) + ImGui + rlImGui + GTest(optional) |
+
+---
+
+### ⚡ 自上次更新 (2026-02-04) 以来的变化
+
+#### 1. Lua API 架构回调整
+
+上次记录的"意图 API" (`move`/`stop`/`spawn`/`destroy`/`query_*`) 已**部分回退**为混合方案。当前 `LuaBinder.hpp` 实际暴露：
+
+| API | 类型 | 说明 |
+|-----|------|------|
+| `create_entity()` | 实体管理 | 创建实体 |
+| `set(e, name, table)` | 字符串分发 | 按组件名挂载 Transform/Velocity/Sprite/Collider |
+| `get_pos(e)` | 查询 | 返回 `{x, y}` |
+| `get_vel(e)` | 查询 | 返回 `{vx, vy}` |
+| `move(e, dx, dy)` | 意图 | 设置速度（硬编码 speed=200） |
+| `is_key_down(key)` | 输入 | 直传 int 键码 |
+| `load_texture(path)` | 资源 | 幂等加载 |
+| `get_collisions()` | 碰撞 | 返回碰撞对 table |
+
+> ⚠️ `stop()`, `spawn()`, `destroy()`, `query_position()`, `query_velocity()` 在代码中**已不存在**。`PrefabManager` 也已删除。`set()` 函数重新引入了字符串分发 + table 参数，与 2026-02-04 记录的架构不一致。
+
+#### 2. CollisionSystem 完成
+
+- ✅ `CollisionSystem::overlaps()` — AABB 碰撞检测
+- ✅ `CollisionSystem::detect()` — O(n²) 暴力检测
+- ✅ `CollisionSystem::resolve()` — 最小穿透轴推开
+- ✅ `get_collisions()` Lua 绑定
+- 主循环已集成 detect → log → resolve 流程
+
+#### 3. DebugUI 模块新增
+
+- ✅ ImGui + rlImGui 集成（CMake FetchContent）
+- ✅ `DebugUI::Init()` / `Draw()` / `Shutdown()`
+- ✅ `DrawEntityInspector()` — 按组件类型勾选展示，直接遍历 pool
+- 当前支持 Transform / Velocity 两个面板（Sprite/Collider checkbox 已有但尚未展开）
+
+#### 4. RenderSystem 改为 namespace + 自由函数
+
+- 从上次的类实例方案改为 `namespace Rinn::RenderSystem` + `inline` 自由函数
+- 新增 `DrawTextCN()` — 基于 `LoadFontEx` 加载黑体，支持 CJK 统一表意文字区 (U+4E00–U+9FFF)
+- 新增 `DrawSprites()` 按 `layer` 排序后渲染
+
+#### 5. SparseSet 增强
+
+- ✅ `reserve()` — 场景级预分配
+- ✅ `raw_data()` / `raw_entity_data()` — System 直接线性遍历
+- ✅ `prefetch()` / `prefetch_dense()` — 两阶段软件预取
+- ✅ 迭代器类型别名 (`iterator`, `const_iterator`, `value_type`)
+
+#### 6. 组件扩展
+
+自上次新增：
+- `Collider` — AABB 碰撞盒 (`width`, `height`, `offset_x`, `offset_y`, `is_trigger`, `is_static`)
+- `IsPlayer`, `IsEnemy`, `IsDead`, `IsStatic` — 零开销标签组件
+- 全部通过 `static_assert` 编译期校验 (aggregate / trivially_copyable / empty)
+
+#### 7. Boids 算法（Lua 侧）
+
+- `Boids.lua` 实现了 `get_neighbors()`, `separation()`, `alignment()`, `cohesion()`
+- **未被 `main.lua` 调用**，属于实验性代码
+
+---
+
+### 📈 模块完成度
+
+| 模块 | 上次 (02-04) | 当前 (04-07) | 变化 |
+|------|-------------|-------------|------|
+| ECS Core | 100% | 100% | — |
+| Lua 脚本系统 | 意图 API 100% | **混合 API ~85%** | ⚠️ 架构回退 |
+| 渲染系统 | 85% | **95%** | +中文/层排序 |
+| 物理系统 | 100% | 100% | — |
+| 输入系统 | 100% | 100% | — |
+| 碰撞系统 | ❌ | **100%** | ✅ 新增 |
+| DebugUI | ❌ | **80%** | ✅ 新增 |
+| 资源管理 | 80% | 80% | — (仅 Texture) |
+| 热重载 | 0% | 0% | — |
+| PrefabManager | 100% | **删除** | — |
+
+**整体完成度**: ~75% → **~80%**
+
+---
+
+### 🔍 代码统计更新
+
+| 分类 | 行数 |
+|------|------|
+| **C++ 源码** (`src/`) | ~1281 行 (14 文件) |
+| **Lua 脚本** (`scripts/`) | ~106 行 (3 文件) |
+| **测试代码** (`tests/`) | ~1526 行 (4 文件) |
+| **构建配置** | ~142 行 |
+| **合计** | ~3055 行 |
+
+---
+
+### ⚠️ 发现的问题
+
+1. **Lua API 架构漂移**
+   - 上次记录为纯"意图 API"（`move`/`stop`/`spawn`），实际代码中 `set()` 重新引入了字符串分发 + table 创建，与"零 GC 压力"目标矛盾
+   - `move()` 硬编码 `speed = 200.0f`，无法从 Lua 侧调整
+
+2. **碰撞日志在主循环中用 `std::cout`**
+   - 每帧打印碰撞对，高频输出会拖慢帧率
+   - 应改为条件输出或接入 DebugUI
+
+3. **DebugUI 未处理 Sprite / Collider 面板**
+   - Checkbox 已创建但对应的 `if (show_sprite)` / `if (show_collider)` 分支缺失
+
+4. **Boids.lua 未集成**
+   - 三个函数已写好但 `main.lua` 未调用，NPC 无 AI 行为
+
+5. **资源路径硬编码**
+   - `main.lua` 和 `RenderSystem.hpp` 中使用 `../../../` 相对路径，依赖构建产物位置
+
+6. **ScriptContext 退化**
+   - 上个阶段是一个类，现在只剩一个 `Init_lua()` 自由函数（8 行），`run()`/`run_file()` 方法已删除
+
+---
+
+### 🎯 下一步建议
+
+1. **统一 Lua API 架构** 🔴 — 决定是走"意图 API"还是"字符串分发"，二选一
+2. **移除主循环碰撞日志** 🟡 — 改为 DebugUI 面板或条件开关
+3. **补全 DebugUI 面板** 🟡 — Sprite / Collider 检查器
+4. **集成 Boids** 🟢 — 让 NPC 走起来
+5. **资源路径系统** 🟢 — 改为可配置的基础路径

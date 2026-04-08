@@ -23,7 +23,8 @@ namespace Rinn {
 			if (name == "Transform") {
 				reg.emplace<Transform>(e,
 					data.get<float>("x"),
-					data.get<float>("y"));
+					data.get<float>("y"),
+					data.get<int>("layer"));
 			}
 			else if (name == "Velocity") {
 				reg.emplace<Rinn::Velocity>(e,

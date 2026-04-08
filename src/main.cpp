@@ -45,6 +45,8 @@ int main() {
 		CollisionSystem::resolve(reg, hits);
 		RenderSystem::DrawSprites(reg, res);
 
+		RenderSystem::DrawTextCN("快交今天的钱", 100, 150, 32, RED);
+
 		DebugUI::Draw(reg);
 		RenderSystem::EndFrame();
 	}

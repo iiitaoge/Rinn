@@ -31,12 +31,6 @@ namespace Rinn{
     };
 
 
-    // 暂时用的情绪组件
-    struct Emotion {
-        float fear;
-        float anger;
-        float greed;
-    };
 
     // ====================================================================
     // 标签组件 (Tag Components) - 零开销标记
