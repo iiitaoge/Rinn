@@ -5,6 +5,7 @@
 #include "../Resources/ResourceManager.hpp"
 #include "../Systems/InputSystem.hpp"
 #include "../Systems/CollisionSystem.hpp"
+#include "../Systems/RenderSystem.hpp"
 
 namespace Rinn {
 	inline void bind(sol::state& lua, Registry& reg, ResourceManager& res) {
@@ -72,5 +73,8 @@ namespace Rinn {
 			for (auto& h : hits) result.emplace_back(h.a, h.b);
 			return sol::as_table(result);
 			});
+
+		// ========= HD-2D 新增：控制 3D 摄像机焦点 =========
+		lua.set_function("set_camera_target", RenderSystem::UpdateCamera);
 	}
 }

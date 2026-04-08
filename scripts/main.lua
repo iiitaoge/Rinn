@@ -44,4 +44,8 @@ function on_update()
     if is_key_down(65) then dx = -1 end
     if is_key_down(68) then dx =  1 end
     move(player, dx, dy)
+
+    -- HD-2D 新增：物理逻辑跑完之后，在只拥有 {x,y} 数据的状态下，通知 C++ 的 3D 摄像机聚焦到此
+    local px, py = get_pos(player)
+    set_camera_target(px, py)
 end
