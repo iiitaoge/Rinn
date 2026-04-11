@@ -23,6 +23,11 @@ namespace Rinn{
         float src_h = 0;
     };
 
+    // 专属轻量级 UI 气泡组件，保证了 0 指针引用
+    struct TextBubble {
+        char text[256] = { 0 };
+        float display_time = 0.0f;
+    };
 
     struct Velocity {
         float vx, vy;
@@ -60,12 +65,14 @@ namespace Rinn{
     static_assert(std::is_aggregate_v<Sprite>,     "Sprite must be aggregate");
     static_assert(std::is_aggregate_v<Velocity>,   "Velocity must be aggregate");
     static_assert(std::is_aggregate_v<Collider>,   "Collider must be aggregate");
+    static_assert(std::is_aggregate_v<TextBubble>, "TextBubble must be aggregate");
 
     // 可序列化：trivially copyable + standard layout → memcpy 安全
     static_assert(std::is_trivially_copyable_v<Transform>, "Transform must be trivially copyable for serialization");
     static_assert(std::is_trivially_copyable_v<Sprite>,    "Sprite must be trivially copyable for serialization");
     static_assert(std::is_trivially_copyable_v<Velocity>,  "Velocity must be trivially copyable for serialization");
     static_assert(std::is_trivially_copyable_v<Collider>,  "Collider must be trivially copyable for serialization");
+    static_assert(std::is_trivially_copyable_v<TextBubble>,"TextBubble must be trivially copyable for serialization");
 
     // 标签组件：空类型
     static_assert(std::is_empty_v<IsPlayer>, "IsPlayer must be empty (tag component)");

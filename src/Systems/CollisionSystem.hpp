@@ -39,20 +39,29 @@ namespace Rinn::CollisionSystem {
             auto& ta = reg.get<Transform>(a); auto& ca = reg.get<Collider>(a);
             auto& tb = reg.get<Transform>(b); auto& cb = reg.get<Collider>(b);
 
+            // [新增物理特性]：只有拥有 Velocity 组件才是软体可被推挤的，否则就是“不可撼动的刚体”！
+            bool a_movable = reg.has<Velocity>(a);
+            bool b_movable = reg.has<Velocity>(b);
+
+            if (!a_movable && !b_movable) continue;
+
             // 计算各轴穿透深度
             float ox = std::min(ta.x + ca.width - tb.x, tb.x + cb.width - ta.x);
             float oy = std::min(ta.y + ca.height - tb.y, tb.y + cb.height - ta.y);
 
-            // 沿最小穿透轴推开，各退一半
+            // 沿最小穿透轴推开
             if (ox < oy) {
                 float sign = (ta.x < tb.x) ? -1.0f : 1.0f;
-                ta.x += sign * ox * 0.5f;
-                tb.x -= sign * ox * 0.5f;
+                // 如果双方都能动，各退一半；只有一方能走，动的那方承受全部反作用力！
+                if (a_movable && b_movable) { ta.x += sign * ox * 0.5f; tb.x -= sign * ox * 0.5f; }
+                else if (a_movable) { ta.x += sign * ox; }
+                else if (b_movable) { tb.x -= sign * ox; }
             }
             else {
                 float sign = (ta.y < tb.y) ? -1.0f : 1.0f;
-                ta.y += sign * oy * 0.5f;
-                tb.y -= sign * oy * 0.5f;
+                if (a_movable && b_movable) { ta.y += sign * oy * 0.5f; tb.y -= sign * oy * 0.5f; }
+                else if (a_movable) { ta.y += sign * oy; }
+                else if (b_movable) { tb.y -= sign * oy; }
             }
         }
     }

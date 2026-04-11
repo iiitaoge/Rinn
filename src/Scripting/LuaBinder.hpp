@@ -9,6 +9,8 @@
 
 namespace Rinn {
 	inline void bind(sol::state& lua, Registry& reg, ResourceManager& res) {
+		// 极简主义：引入最基础的标准库、字符串库和数学库以支持地图截取和计算
+		lua.open_libraries(sol::lib::base, sol::lib::string, sol::lib::math, sol::lib::table);
 
 		lua.new_usertype<Entity>("Entity");  // 纯黑盒，不暴露字段
 
@@ -41,6 +43,24 @@ namespace Rinn {
 				reg.emplace<Rinn::Collider>(e,
 					data.get<float>("width"),
 					data.get<float>("height"));
+			}
+			else if (name == "TextBubble") {
+				// 自定义 ECS 没有 emplace_or_replace，需要手动先安全移除再挂载
+				if (reg.has<Rinn::TextBubble>(e)) {
+					reg.remove<Rinn::TextBubble>(e);
+				}
+				auto& tb = reg.emplace<Rinn::TextBubble>(e);
+				
+				std::string t = data.get<std::string>("text");
+				strncpy(tb.text, t.c_str(), 255);
+				tb.display_time = data.get<float>("time"); // 移除 get_or，强制要求必须传入 time
+			}
+			});
+
+		// 绑定移除组件
+		lua.set_function("remove", [&reg](Entity e, const std::string& name) {
+			if (name == "TextBubble") {
+				reg.remove<TextBubble>(e);
 			}
 			});
 
@@ -76,5 +96,7 @@ namespace Rinn {
 
 		// ========= HD-2D 新增：控制 3D 摄像机焦点 =========
 		lua.set_function("set_camera_target", RenderSystem::UpdateCamera);
+		// ========= 渲染模式切换 =========
+		lua.set_function("set_hd2d_mode", RenderSystem::SetHD2DMode);
 	}
 }

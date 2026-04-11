@@ -33,19 +33,17 @@ int main() {
 	
 	while (!RenderSystem::ShouldClose()) {
 		RenderSystem::BeginFrame();
-		RenderSystem::DrawText(std::format("FPS: {}", RenderSystem::FPS()).c_str(), 10, 10, 20, GREEN);
-
 		lua["on_update"]();  // 每帧调 Lua
 
 		PhysicSystem::update(reg, RenderSystem::DeltaTime());
 		auto hits = CollisionSystem::detect(reg);
-		for (auto& h : hits) {
-			std::cout << std::format("Collision: {} <-> {}\n", h.a.index(), h.b.index());
-		}
 		CollisionSystem::resolve(reg, hits);
 		RenderSystem::DrawSprites(reg, res);
-
-		RenderSystem::DrawTextCN("快交今天的钱", 100, 150, 32, RED);
+		
+		// 退出世界渲染，进入 UI 的 1:1 屏幕空间！
+		RenderSystem::EndCameraMode();
+		RenderSystem::DrawTextBubbles(reg);
+		RenderSystem::DrawText(std::format("FPS: {}", RenderSystem::FPS()).c_str(), 10, 10, 20, GREEN);
 
 		DebugUI::Draw(reg);
 		RenderSystem::EndFrame();
