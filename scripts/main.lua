@@ -4,24 +4,40 @@ local ASSET_DIR = "../../../assets/texture/"
 -- 新增：通过 Lua 脚本加载你用 Tiled 编辑的可视化地图组合
 dofile("../../../scripts/map_loader.lua")
 -- 动态加载瓦片，同时获取里面被美术划定的剧情包围盒坐标！
-local _, map_triggers = load_tiled_map("../../../assets/texture/simple_map.lua")
+local map_ok, map_triggers = load_tiled_map("../../../assets/texture/complex_map.lua")
+
+-- 缓存地图尺寸，用于无玩家时摄像机兜底聚焦
+local map_data = dofile("../../../assets/texture/complex_map.lua")
+local map_center_x = (map_data.width * map_data.tilewidth) / 2
+local map_center_y = (map_data.height * map_data.tileheight) / 2
 
 -- 引入最新剧情数据
 local dialogue_data = dofile("../../../scripts/dialogue_data.lua")
+
+-- ===============================================================
+-- 播放背景音乐 (只需让引擎启动时播放一次，AudioSystem 会在后台持续刷新流)
+-- 请确保这个文件在你的电脑上存在！(如果你改了名字，就在这里修改它)
+play_bgm("../../../assets/audio/bgm.ogg")
+-- ===============================================================
 
 -- 遍历数据，自动创建所有实体
 local player = nil
 local npcs = {} -- 新增：保存所有可互动 NPC 列表
 local progress = {} -- 记录每个 NPC 说到哪句话了
 
--- 叙事的绝对主角：“全局微状态机”
-local global_state = {
-    has_berry = false,
-    has_hammer = false,
-    has_pass = false,
-    guard_passed = false,
-    chest_opened = false
-}
+-- 全局 flag set：string -> true，引擎不感知任何具体业务语义
+local flags = {}
+
+-- 通用分支选择：返回第一个 when 条件全部满足的 branch
+local function resolve_branch(branches)
+    for _, b in ipairs(branches) do
+        local ok = true
+        for _, f in ipairs(b.when) do
+            if not flags[f] then ok = false; break end
+        end
+        if ok then return b end
+    end
+end
 
 -- ===============================================================
 -- Tiled 驱动剧情时代：接收美术侧画下的对象区域数据！取代原有的硬坐标
@@ -55,6 +71,8 @@ if map_triggers then
             table.insert(npcs, { 
                 id = e, 
                 name = tex_name, 
+                w = obj.w,
+                h = obj.h,
                 cx = obj.x + (obj.w or 32) / 2,
                 cy = obj.y + (obj.h or 32) / 2
             })
@@ -71,27 +89,37 @@ if map_triggers then
                 id = trigger_e, 
                 name = obj.name, 
                 type = obj.type,
+                w = obj.w,
+                h = obj.h,
                 cx = obj.x + (obj.w or 32) / 2,
                 cy = obj.y + (obj.h or 32) / 2
             })
         end
     end
 end
+
+-- [临时测试] Tiled 对象层为空时，手动创建 Player
+if not player then
+    player = create_entity()
+    local tex = load_texture(ASSET_DIR .. "Player.png")
+    set(player, "Transform", { x = map_center_x, y = map_center_y, layer = 2 })
+    set(player, "Sprite", { texture_id = tex, width = 64, height = 64, src_x = 0, src_y = 0, src_w = 0, src_h = 0 })
+    set(player, "Velocity", { x = 0, y = 0 })
+    print("[TEST] Manual player created at map center: " .. map_center_x .. ", " .. map_center_y)
+end
 -- ===============================================================
 
--- 渲染模式切换：按 TAB 键可以在 纯2D 和 HD-2D 之间无缝切换
-local is_hd2d = false
-set_hd2d_mode(is_hd2d)
+
 
 -- 每帧逻辑
 function on_update()
-    if not player then return end
-
-    -- 热切换 2D / 3D
-    if is_key_down(258) then -- 258 是 Raylib 的 TAB 键键码
-        is_hd2d = not is_hd2d
-        set_hd2d_mode(is_hd2d)
+    if not player then
+        -- 没有玩家实体时，摄像机兜底聚焦到地图中央，防止白屏
+        set_camera_target(map_center_x, map_center_y)
+        return
     end
+
+
 
     local dx, dy = 0, 0
     if is_key_down(87) then dy = -1 end
@@ -150,71 +178,29 @@ function on_update()
             end
         end
 
-        -- 如果锁定了最近的目标，才进行状态机推演
+        -- 锁定最近目标后，用通用引擎推演，不认识任何具体物件
         if target_valid_key and target_npc then
-            local valid_key = target_valid_key
+            local key = target_valid_key
             local npc = target_npc
-            local current_branch = "default"
-            
-            if valid_key == "Guard_Albedo.png" then
-                if global_state.guard_passed then current_branch = "passed"
-                elseif global_state.has_pass then current_branch = "with_pass"
-                else current_branch = "default" end
-            elseif valid_key == "blacksmith.png" then
-                if global_state.has_pass then current_branch = "done"
-                elseif global_state.has_hammer then current_branch = "with_hammer"
-                elseif progress[valid_key] and progress[valid_key]["default"] == 5 then
-                    current_branch = "waiting"
-                else current_branch = "default" end
-            elseif valid_key == "statue" then
-                if global_state.has_hammer then current_branch = "done"
-                elseif global_state.has_berry then current_branch = "with_berry"
-                elseif progress[valid_key] and progress[valid_key]["default"] == 5 then
-                    current_branch = "waiting"
-                else current_branch = "default" end
-            elseif valid_key == "Bush" then
-                if global_state.has_berry or global_state.has_hammer then current_branch = "empty"
-                else current_branch = "default" end
-            elseif valid_key == "Chest" then
-                if global_state.chest_opened then current_branch = "empty"
-                else current_branch = "default" end
-            end
 
-            progress[valid_key] = progress[valid_key] or {}
-            progress[valid_key][current_branch] = progress[valid_key][current_branch] or 1
-            local cur_idx = progress[valid_key][current_branch]
-            
-            local lines = dialogue_data[valid_key][current_branch]
-            
-            if lines and cur_idx <= #lines then
-                set(npc.id, "TextBubble", { text = lines[cur_idx], time = 3.0 })
-                
-                if valid_key == "Chest" and current_branch == "default" and cur_idx == 3 then
-                    global_state.chest_opened = true
-                end
-                if valid_key == "Bush" and current_branch == "default" and cur_idx == 3 then
-                    global_state.has_berry = true
-                end
-                if valid_key == "statue" and current_branch == "with_berry" and cur_idx == 4 then
-                    global_state.has_hammer = true
-                end
-                if valid_key == "blacksmith.png" and current_branch == "with_hammer" and cur_idx == 3 then
-                    global_state.has_pass = true
-                end
-                if valid_key == "Guard_Albedo.png" and current_branch == "with_pass" and cur_idx == 3 then
-                    global_state.guard_passed = true
-                end
+            local branch = resolve_branch(dialogue_data[key])
+            if branch then
+                local bid = branch.id
+                progress[key] = progress[key] or {}
+                progress[key][bid] = progress[key][bid] or 1
+                local cur_idx = progress[key][bid]
 
-                progress[valid_key][current_branch] = cur_idx + 1
-            else
-                remove(npc.id, "TextBubble")
-                progress[valid_key][current_branch] = 1
-                
-                if valid_key == "blacksmith.png" and current_branch == "default" then
-                     progress[valid_key]["default"] = 5
-                end
-                if valid_key == "statue" and current_branch == "default" then
-                     progress[valid_key]["default"] = 5
+                if cur_idx <= #branch.lines then
+                    set(npc.id, "TextBubble", { text = branch.lines[cur_idx], time = 3.0 })
+                    -- 副作用：由数据声明，引擎统一触发
+                    if branch.on_line and cur_idx == branch.on_line then
+                        if branch.gives  then flags[branch.gives] = true end
+                        if branch.effect then branch.effect(npc) end
+                    end
+                    progress[key][bid] = cur_idx + 1
+                else
+                    remove(npc.id, "TextBubble")
+                    progress[key][bid] = 1
                 end
             end
         end

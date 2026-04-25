@@ -14,13 +14,15 @@ namespace Rinn{
     // Components.hpp
     struct Sprite {
         size_t texture_id;    // 依然指代那一整张大图（Assets中的 TX Props.png）
+        size_t normal_id = 0; // 法线贴图 ID，0 = 无法线
         float width, height;  // 最终画在屏幕上的大小
 
-        // 👇 新增截取信息（等于 json 中的从大图中切那一小块的坐标和尺寸）
+        // 截取信息（从大图中切那一小块的坐标和尺寸）
         float src_x = 0;
         float src_y = 0;
         float src_w = 0;
         float src_h = 0;
+        bool is_ground = false; // 地面瓦片：水平铺在 XZ 平面
     };
 
     // 专属轻量级 UI 气泡组件，保证了 0 指针引用
@@ -38,8 +40,8 @@ namespace Rinn{
         float width, height;          // 碰撞盒尺寸
         float offset_x = 0.0f;        // 相对 Transform 的偏移
         float offset_y = 0.0f;
-        bool is_trigger = false;      // true = 不阻挡，只触发事件
-        bool is_static = false;       // true = 静态物体（优化用）
+        uint16_t layer = 0x0001;      // 我属于哪一层（位掩码）
+        uint16_t mask  = 0xFFFF;      // 我和哪些层发生碰撞（位掩码）
     };
 
 

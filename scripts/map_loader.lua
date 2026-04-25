@@ -32,8 +32,17 @@ function load_tiled_map(map_path)
     local map_triggers = {} -- 专门收集 Tiled 里面的事件框
     
     for _, layer in ipairs(map.layers) do
+        -- [做减法]：Tiled 里隐藏的图层直接跳过，不加载不渲染
+        if layer.visible == false then
+            goto continue_layer
+        end
+        
         if layer.type == "tilelayer" then
             for idx, gid in ipairs(layer.data) do
+                -- [关键]：Tiled 会把翻转信息塞进 GID 的最高 4 位，必须先剥离才能匹配到正确图集
+                -- 原始 GID 可能是 2147483706，低 28 位才是真实的图块 ID
+                -- 用取模替代位运算 &，兼容 Lua 5.1/5.2/5.3/5.4 全版本
+                gid = gid % (2^28)
                 if gid > 0 then -- gid 为 0 时意味着空地，直接做减法跳过不渲染
                     
                     -- 匹配该 gid 属于哪个图集
@@ -67,11 +76,6 @@ function load_tiled_map(map_path)
                             layer = layer.id or 0 
                         })
                         
-                        -- 第二层 (层级 2) 默认全是景物等障碍物，霸道地给它们全部注入实心刚体基因！
-                        if layer.id == 2 then
-                            set(e, "Collider", { width = map.tilewidth, height = map.tileheight })
-                        end
-                        
                         set(e, "Sprite", {
                             texture_id = ts_data.tex_id,
                             width = map.tilewidth,  
@@ -79,30 +83,47 @@ function load_tiled_map(map_path)
                             src_x = src_x,
                             src_y = src_y,
                             src_w = ts_data.tilewidth,
-                            src_h = ts_data.tileheight
+                            src_h = ts_data.tileheight,
+                            is_ground = true
                         })
+                    else
+                        print("[WARN] GID=" .. gid .. " 找不到匹配的图集！请检查 tilesets 配置。")
                     end
                 end
             end
         elseif layer.type == "objectgroup" then
-            -- Tiled 对象层：读取配置好的隐藏逻辑触发器
             if layer.objects then
                 for _, obj in ipairs(layer.objects) do
-                    -- 美术在 Tiled 里可能习惯填 Name，也可能习惯填 Type(Class)
-                    local trigger_name = (obj.name and obj.name ~= "") and obj.name or obj.type
-                    if trigger_name and trigger_name ~= "" then
-                        table.insert(map_triggers, {
-                            name = trigger_name,
-                            type = obj.type,
-                            x = obj.x,
-                            y = obj.y,
-                            w = obj.width,
-                            h = obj.height
+                    local obj_type = obj.type or ""
+                    
+                    if obj_type == "Wall" or obj_type == "Collision" then
+                        -- [新] 对象层碰撞：纯物理实体，无 Sprite，只有 Transform + Collider
+                        local wall = create_entity()
+                        set(wall, "Transform", { x = obj.x, y = obj.y, layer = 0 })
+                        set(wall, "Collider", {
+                            width = obj.width,
+                            height = obj.height,
+                            layer = 0x0002,   -- 墙体碰撞层
+                            mask  = 0x0001    -- 只和玩家碰撞
                         })
+                    else
+                        -- 原有逻辑：剧情触发器交给 main.lua 处理
+                        local trigger_name = (obj.name and obj.name ~= "") and obj.name or obj_type
+                        if trigger_name and trigger_name ~= "" then
+                            table.insert(map_triggers, {
+                                name = trigger_name,
+                                type = obj_type,
+                                x = obj.x,
+                                y = obj.y,
+                                w = obj.width,
+                                h = obj.height
+                            })
+                        end
                     end
                 end
             end
         end
+        ::continue_layer::
     end
 
     print("Map loaded successfully!")

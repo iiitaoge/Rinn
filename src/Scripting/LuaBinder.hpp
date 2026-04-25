@@ -6,6 +6,7 @@
 #include "../Systems/InputSystem.hpp"
 #include "../Systems/CollisionSystem.hpp"
 #include "../Systems/RenderSystem.hpp"
+#include "../Systems/AudioSystem.hpp"
 
 namespace Rinn {
 	inline void bind(sol::state& lua, Registry& reg, ResourceManager& res) {
@@ -17,6 +18,11 @@ namespace Rinn {
 		lua.set_function("load_texture", [&res](const std::string& path) -> uint16_t {
 			return res.load_texture(path);
 		});
+
+		lua.set_function("play_bgm", [](const std::string& path) {
+			AudioSystem::PlayBGM(path);
+		});
+
 		// 绑定 创建实体
 		lua.set_function("create_entity", [&reg]() { return reg.create_entity(); });
 		// 绑定 挂载组件
@@ -27,7 +33,7 @@ namespace Rinn {
 				reg.emplace<Transform>(e,
 					data.get<float>("x"),
 					data.get<float>("y"),
-					data.get<int>("layer"));
+					data["layer"].get_or(0));
 			}
 			else if (name == "Velocity") {
 				reg.emplace<Rinn::Velocity>(e,
@@ -36,13 +42,24 @@ namespace Rinn {
 			}
 			else if (name == "Sprite") {
 				reg.emplace<Rinn::Sprite>(e,
-					static_cast<uint16_t>(data["texture_id"]),
-					data["width"], data["height"], data["src_x"], data["src_y"], data["src_w"], data["src_h"]);
+					data.get<size_t>("texture_id"),
+					data["normal_id"].get_or(size_t(0)),
+					data.get<float>("width"),
+					data.get<float>("height"),
+					data["src_x"].get_or(0.0f),
+					data["src_y"].get_or(0.0f),
+					data["src_w"].get_or(0.0f),
+					data["src_h"].get_or(0.0f),
+					data["is_ground"].get_or(false));
 			}
 			else if (name == "Collider") {
 				reg.emplace<Rinn::Collider>(e,
 					data.get<float>("width"),
-					data.get<float>("height"));
+					data.get<float>("height"),
+					data["offset_x"].get_or(0.0f),
+					data["offset_y"].get_or(0.0f),
+					data["layer"].get_or(static_cast<uint16_t>(0x0001)),
+					data["mask"].get_or(static_cast<uint16_t>(0xFFFF)));
 			}
 			else if (name == "TextBubble") {
 				// 自定义 ECS 没有 emplace_or_replace，需要手动先安全移除再挂载
@@ -60,7 +77,13 @@ namespace Rinn {
 		// 绑定移除组件
 		lua.set_function("remove", [&reg](Entity e, const std::string& name) {
 			if (name == "TextBubble") {
-				reg.remove<TextBubble>(e);
+				if(reg.has<TextBubble>(e)) reg.remove<TextBubble>(e);
+			}
+			else if (name == "Collider") {
+				if(reg.has<Collider>(e)) reg.remove<Collider>(e);
+			}
+			else if (name == "Sprite") {
+				if(reg.has<Sprite>(e)) reg.remove<Sprite>(e);
 			}
 			});
 
@@ -94,9 +117,7 @@ namespace Rinn {
 			return sol::as_table(result);
 			});
 
-		// ========= HD-2D 新增：控制 3D 摄像机焦点 =========
+		// 3D 摄像机焦点跟随
 		lua.set_function("set_camera_target", RenderSystem::UpdateCamera);
-		// ========= 渲染模式切换 =========
-		lua.set_function("set_hd2d_mode", RenderSystem::SetHD2DMode);
 	}
 }

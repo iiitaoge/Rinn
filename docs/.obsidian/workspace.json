@@ -27,12 +27,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "planning/progress.md",
+                "file": "annotated/scripts/main_lua.md",
                 "mode": "preview",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "progress"
+              "title": "main_lua"
             }
           }
         ],
@@ -200,6 +200,8 @@
   },
   "active": "002edc02d8e09358",
   "lastOpenFiles": [
+    "annotated/scripts/map_loader.md",
+    "planning/progress.md",
     "annotated/src/Core/SparseSet.md",
     "annotated/src/Components/Components.md",
     "annotated/src/main.md",
