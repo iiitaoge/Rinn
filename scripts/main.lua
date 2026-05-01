@@ -102,8 +102,9 @@ end
 if not player then
     player = create_entity()
     local tex = load_texture(ASSET_DIR .. "Player.png")
+    local nor = load_texture(ASSET_DIR .. "Player_n.png")
     set(player, "Transform", { x = map_center_x, y = map_center_y, layer = 2 })
-    set(player, "Sprite", { texture_id = tex, width = 64, height = 64, src_x = 0, src_y = 0, src_w = 0, src_h = 0 })
+    set(player, "Sprite", { texture_id = tex, normal_id = nor, width = 256, height = 256, src_x = 0, src_y = 0, src_w = 0, src_h = 0 })
     set(player, "Velocity", { x = 0, y = 0 })
     print("[TEST] Manual player created at map center: " .. map_center_x .. ", " .. map_center_y)
 end

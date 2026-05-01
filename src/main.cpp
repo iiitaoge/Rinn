@@ -9,7 +9,8 @@
 #include "Systems/PhysicSystem.hpp"
 #include "Systems/CollisionSystem.hpp"
 #include "Systems/AudioSystem.hpp"
-#include "DebugUI/DebugUI.hpp"
+#include "UI/DebugUI.hpp"
+#include "UI/LightUI.hpp"
 
 using namespace::Rinn;
 
@@ -54,7 +55,10 @@ int main() {
 		
 		RenderSystem::DrawText(std::format("FPS: {}", RenderSystem::FPS()).c_str(), 10, 10, 20, GREEN);
 
-		DebugUI::Draw(reg);
+		rlImGuiBegin();
+		DebugUI::DrawDebugUI(reg);
+		LightUI::DrawLightUI();
+		rlImGuiEnd();
 		RenderSystem::EndFrame();
 	}
 

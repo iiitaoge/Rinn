@@ -74,7 +74,8 @@ add_executable(${PROJECT_NAME}
     src/Systems/InputSystem.hpp
     src/Systems/PhysicSystem.hpp
     src/Systems/CollisionSystem.hpp
-    src/DebugUI/DebugUI.hpp
+    src/UI/DebugUI.hpp
+    src/UI/LightUI.hpp
 
     # Dear ImGui 核心源文件
     ${imgui_SOURCE_DIR}/imgui.cpp

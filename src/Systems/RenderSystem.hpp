@@ -14,6 +14,22 @@ namespace Rinn::RenderSystem {
     inline Camera3D camera = { 0 };
     inline Shader test_shader = { 0 };
 
+    // TBN接口
+    inline int LocT = 0;
+    inline int LocB = 0;
+    inline int LocN = 0;
+
+    // 法线图接口
+    inline int LocF = 0;
+
+    // 光线
+    inline int LocLD = 0;
+    inline int LocLC = 0;
+    inline int LocAC = 0;
+
+    // raylib运行时手动计算无绑定法线图的默认法线图
+    inline Texture2D flat_normal = { 0 };
+
     // 世界坐标缩放：100像素 = 1米
     constexpr float WORLD_SCALE = 0.01f;
 
@@ -44,8 +60,22 @@ namespace Rinn::RenderSystem {
         if (chinese_font.glyphCount == 0) std::cerr << "字体加载失败!" << std::endl;
         else std::cerr << "字体加载成功!" << std::endl;
 
+
+        Image img = GenImageColor(1, 1, { 128, 128, 255, 255 });
+        flat_normal = LoadTextureFromImage(img);
+
         // 加载测试 shader
         test_shader = LoadShader("../../../assets/shaders/test.vs", "../../../assets/shaders/test.fs");
+        // 建立 C++和GLSL的映射，准备传uniform
+        LocT = GetShaderLocation(test_shader, "tangent");
+        LocB = GetShaderLocation(test_shader, "bitangent");
+        LocN = GetShaderLocation(test_shader, "facenormal");
+
+        LocF = GetShaderLocation(test_shader, "sprite_normal");
+
+        LocLD = GetShaderLocation(test_shader, "lightDir");
+        LocLC = GetShaderLocation(test_shader, "light_color");
+        LocAC = GetShaderLocation(test_shader, "ambient_color");
     }
 
     // ================================================================
@@ -78,19 +108,46 @@ namespace Rinn::RenderSystem {
     inline bool ShouldClose() { return WindowShouldClose(); }
     inline float DeltaTime() { return GetFrameTime(); }
     inline int FPS() { return GetFPS(); }
-    inline void Shutdown() { CloseWindow(); }
+    inline void Shutdown() { 
+        CloseWindow(); 
+        UnloadTexture(flat_normal); 
+        UnloadShader(test_shader);
+        UnloadFont(chinese_font);
+    }
 
-    // 光源
+    // 光源,光色，环境光色
+    inline Vector3 lightDir = { 0.5f, 1.0f, 0.3f };
+    inline Vector3 light_color = { 1.0f, 1.0f, 1.0f };
+    inline Vector3 ambient_color = { 0.15f, 0.2f, 0.4f };
 
-    // 方法 A：用 Raylib 的 Vector3
-    Vector3 vertical_normal = { 0.0f, 0.0f, 1.0f };
-    Vector3 tile_normal = { 0.0f, 1.0f, 0.0f };
-    Vector3 facenormal = { 0 };
 
-    inline void Facenormal() {
-        int loc = GetShaderLocation(test_shader, "facenormal");
-        SetShaderValue(test_shader, loc, &facenormal, SHADER_UNIFORM_VEC3);
+    // TBN法线，Raylib不支持传mat3矩阵，分三次vec3传进去合并
+    inline Vector3 tangent = { 0 };
+    inline Vector3 bitangent = { 0 };
+    inline Vector3 facenormal = { 0 };
 
+    // 地面TBN矩阵
+    inline Vector3 tile_T = { 1.0f, 0.0f, 0.0f };   // 第 1 列
+    inline Vector3 tile_B = { 0.0f, 0.0f, 1.0f };   // 第 2 列
+    inline Vector3 tile_N = { 0.0f, 1.0f, 0.0f };   // 第 3 列
+
+    // 立面TBN矩阵
+    inline Vector3 vert_T = { 1.0f,  0.0f, 0.0f };  // 第 1 列
+    inline Vector3 vert_B = { 0.0f, -1.0f, 0.0f };  // 第 2 列
+    inline Vector3 vert_N = { 0.0f,  0.0f, 1.0f };  // 第 3 列
+
+    // 传入TBN
+    inline void UploadTBN() {
+        SetShaderValue(test_shader, LocT, &tangent, SHADER_UNIFORM_VEC3);
+        SetShaderValue(test_shader, LocB, &bitangent, SHADER_UNIFORM_VEC3);
+        SetShaderValue(test_shader, LocN, &facenormal, SHADER_UNIFORM_VEC3);
+
+    }
+
+    inline void Uploadlight() {
+        SetShaderValue(test_shader, LocLD, &lightDir, SHADER_UNIFORM_VEC3);
+        SetShaderValue(test_shader, LocLC, &light_color, SHADER_UNIFORM_VEC3);
+        SetShaderValue(test_shader, LocAC, &ambient_color, SHADER_UNIFORM_VEC3);
     }
 
 
@@ -130,11 +187,12 @@ namespace Rinn::RenderSystem {
     // ================================================================
     // 3D面片：ground=true 水平铺地，ground=false 竖直站立
     // ================================================================
-    inline void DrawSprite3D(Texture2D tex, Rectangle src, Vector3 pos, Vector2 size, bool ground) {
+    inline void DrawSprite3D(Texture2D tex, Texture2D nor, Rectangle src, Vector3 pos, Vector2 size, bool ground) {
         rlSetTexture(tex.id);
+        SetShaderValueTexture(test_shader, LocF, nor);  // 传入法线图
         rlBegin(RL_QUADS);
         rlColor4ub(255, 255, 255, 255);
-        
+
         float u1 = src.x / tex.width;
         float v1 = src.y / tex.height;
         float u2 = (src.x + src.width) / tex.width;
@@ -164,6 +222,7 @@ namespace Rinn::RenderSystem {
     // 精灵绘制：两趟渲染（地面 → 立式精灵）
     // ================================================================
     inline void DrawSprites(Registry& reg, ResourceManager& res) {
+        Uploadlight();
         std::vector<Entity> ground_tiles;
         std::vector<Entity> sprites;
 
@@ -172,13 +231,17 @@ namespace Rinn::RenderSystem {
             else sprites.push_back(e);
         }
         // 地面法线
-        facenormal = tile_normal;
-        Facenormal();
+        tangent = tile_T;
+        bitangent = tile_B;
+        facenormal = tile_N;
+        UploadTBN();
         // Pass 1: 地面瓦片（不透明，无需排序）
         for (Entity e : ground_tiles) {
             const auto& t = reg.get<Transform>(e);
             const auto& s = reg.get<Sprite>(e);
             Texture2D& tex = res.get_texture(s.texture_id);
+            Texture2D nor = (s.normal_id == 0) ? flat_normal : res.get_texture(s.normal_id);
+
 
             Rectangle src = { s.src_x, s.src_y, 
                               s.src_w == 0 ? (float)tex.width : s.src_w, 
@@ -186,12 +249,14 @@ namespace Rinn::RenderSystem {
 
             Vector3 pos = { t.x * WORLD_SCALE, 0.0f, t.y * WORLD_SCALE };
             Vector2 size = { s.width * WORLD_SCALE, s.height * WORLD_SCALE };
-            DrawSprite3D(tex, src, pos, size, true);
+            DrawSprite3D(tex, nor, src, pos, size, true);
         }
 
         // 立式法线
-        facenormal = vertical_normal;
-        Facenormal();
+        tangent = vert_T;
+        bitangent = vert_B;
+        facenormal = vert_N;
+        UploadTBN();
         // Pass 2: 立式精灵（半透明，Back-to-Front 排序）
         std::sort(sprites.begin(), sprites.end(),
             [&reg](Entity a, Entity b) {
@@ -207,6 +272,9 @@ namespace Rinn::RenderSystem {
             const auto& t = reg.get<Transform>(e);
             const auto& s = reg.get<Sprite>(e);
             Texture2D& tex = res.get_texture(s.texture_id);
+            Texture2D nor = (s.normal_id == 0) ? flat_normal : res.get_texture(s.normal_id);
+
+
 
             Rectangle src = { s.src_x, s.src_y, 
                               s.src_w == 0 ? (float)tex.width : s.src_w, 
@@ -214,7 +282,7 @@ namespace Rinn::RenderSystem {
 
             Vector3 pos = { t.x * WORLD_SCALE, 0.0f, t.y * WORLD_SCALE };
             Vector2 size = { s.width * WORLD_SCALE, s.height * WORLD_SCALE };
-            DrawSprite3D(tex, src, pos, size, false);
+            DrawSprite3D(tex, nor, src, pos, size, false);
         }
     }
 
