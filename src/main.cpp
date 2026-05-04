@@ -56,8 +56,8 @@ int main() {
 		RenderSystem::DrawText(std::format("FPS: {}", RenderSystem::FPS()).c_str(), 10, 10, 20, GREEN);
 
 		rlImGuiBegin();
-		DebugUI::DrawDebugUI(reg);
-		LightUI::DrawLightUI();
+		DebugUI::DrawEntityPanel(reg);
+		LightUI::DrawLightPanel();
 		rlImGuiEnd();
 		RenderSystem::EndFrame();
 	}

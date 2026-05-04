@@ -184,6 +184,28 @@ namespace Rinn::RenderSystem {
         }
     }
 
+    // 光照阴影
+    inline void DrawShadowEllipse(Vector3 center, float rx, float rz, float alpha) {
+        // 1. 设颜色：黑色 + alpha
+        rlColor4ub(0, 0, 0, 255 * alpha);
+        // 2. rlBegin(RL_TRIANGLES)
+        rlBegin(RL_TRIANGLES);
+        float step = 2 * PI / 16;
+        float a1 = 0, a2 = 0, x = 0, z = 0;
+        for (int i = 0; i < 16; i++) {
+            a1 = step * i;
+            a2 = step * (i + 1);
+            // 椭圆中心点
+            rlVertex3f(center.x, center.y, center.z);
+            // z轴远端
+            rlVertex3f(center.x + cos(a2) * rx, center.y, center.z + sin(a2) * rz);              // 边界 i+1
+            // x轴远端
+            rlVertex3f(center.x + cos(a1) * rx, center.y, center.z + sin(a1) * rz);              // 边界 i
+        }
+        rlEnd();
+    }
+
+
     // ================================================================
     // 3D面片：ground=true 水平铺地，ground=false 竖直站立
     // ================================================================
@@ -251,6 +273,17 @@ namespace Rinn::RenderSystem {
             Vector2 size = { s.width * WORLD_SCALE, s.height * WORLD_SCALE };
             DrawSprite3D(tex, nor, src, pos, size, true);
         }
+
+        // 椭圆阴影
+        EndShaderMode();
+        for (auto e : sprites) {
+            const auto& t = reg.get<Transform>(e);
+            const auto& s = reg.get<Sprite>(e);
+            Vector3 shadow_center = { t.x * WORLD_SCALE, 0.05f, t.y * WORLD_SCALE };
+            DrawShadowEllipse(shadow_center, 0.3f, 0.15f, 0.5f);
+        }
+   
+        BeginShaderMode(test_shader);
 
         // 立式法线
         tangent = vert_T;
