@@ -2,6 +2,7 @@
 # PROJECT RINN: Git Ignore Rules (Source Code & Config Only)
 # ============================================================================
 
+docs/
 # --- Build Output & Directories ---
 
 build/

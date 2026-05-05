@@ -20,11 +20,13 @@ namespace Rinn::DebugUI {
         static bool show_velocity = false;
         static bool show_sprite = false;
         static bool show_collider = false;
+        static bool show_need = true;
         // ImGui::CheckboxFlags; // 横排勾选
         ImGui::Checkbox("Transform", &show_transform); ImGui::SameLine();
         ImGui::Checkbox("Velocity", &show_velocity);  ImGui::SameLine();
         ImGui::Checkbox("Sprite", &show_sprite);     ImGui::SameLine();
-        ImGui::Checkbox("Collider", &show_collider);
+        ImGui::Checkbox("Collider", &show_collider); ImGui::SameLine();
+        ImGui::Checkbox("Need", &show_need);
         ImGui::Separator();
         // 每个勾选的组件 → 直接遍历它的 pool
         if (show_transform) {
@@ -45,6 +47,37 @@ namespace Rinn::DebugUI {
                     Entity e = pool.raw_entity_data()[i];
                     auto& v = pool.raw_data()[i];
                     ImGui::Text("  [%d] (%.1f, %.1f)", e.index(), v.vx, v.vy);
+                }
+                ImGui::TreePop();
+            }
+        }
+        if (show_need) {
+            auto& pool = reg.pool<NeedComponent>();
+            if (ImGui::TreeNode("Need", "Need (%zu)", pool.size())) {
+                constexpr const char* labels[NeedComponent::N] = {
+                    "Resource", "Social", "Family", "Safety", "Faith", "Curiosity"
+                };
+                for (size_t i = 0; i < pool.size(); ++i) {
+                    Entity e = pool.raw_entity_data()[i];
+                    auto& need = pool.raw_data()[i];
+                    if (ImGui::TreeNode(reinterpret_cast<void*>(static_cast<intptr_t>(e.id)), "Entity [%d]", e.index())) {
+                        ImGui::Columns(4, "NeedColumns", false);
+                        ImGui::Text("Need"); ImGui::NextColumn();
+                        ImGui::Text("Weight"); ImGui::NextColumn();
+                        ImGui::Text("Satisfaction"); ImGui::NextColumn();
+                        ImGui::Text("Expectation"); ImGui::NextColumn();
+                        ImGui::Separator();
+
+                        for (int n = 0; n < NeedComponent::N; ++n) {
+                            ImGui::Text("%s", labels[n]); ImGui::NextColumn();
+                            ImGui::Text("%.1f", need.weights[n]); ImGui::NextColumn();
+                            ImGui::Text("%.1f", need.satisfaction[n]); ImGui::NextColumn();
+                            ImGui::Text("%.1f", need.expectation[n]); ImGui::NextColumn();
+                        }
+
+                        ImGui::Columns(1);
+                        ImGui::TreePop();
+                    }
                 }
                 ImGui::TreePop();
             }

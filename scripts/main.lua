@@ -53,6 +53,11 @@ if map_triggers then
             set(player, "Sprite", { texture_id = tex, width = obj.w, height = obj.h, src_x = 0, src_y = 0, src_w = 0, src_h = 0 })
             set(player, "Collider", { width = obj.w, height = obj.h })
             set(player, "Velocity", { x = 0, y = 0 })
+            set(player, "Need", {
+                weights = { 4, 3, 5, 2, 1, 2 },
+                satisfaction = { 4, 3, 0, 2, 1, 2 },
+                expectation = { 2, 1, 0, 1, 1, 2 }
+            })
             
         elseif obj.type == "Npc" then
             -- 装配可见的 NPC 实体
@@ -106,6 +111,11 @@ if not player then
     set(player, "Transform", { x = map_center_x, y = map_center_y, layer = 2 })
     set(player, "Sprite", { texture_id = tex, normal_id = nor, width = 256, height = 256, src_x = 0, src_y = 0, src_w = 0, src_h = 0 })
     set(player, "Velocity", { x = 0, y = 0 })
+    set(player, "Need", {
+        weights = { 4, 3, 5, 2, 1, 2 },
+        satisfaction = { 4, 3, 0, 2, 1, 2 },
+        expectation = { 2, 1, 0, 1, 1, 2 }
+    })
     print("[TEST] Manual player created at map center: " .. map_center_x .. ", " .. map_center_y)
 end
 -- ===============================================================

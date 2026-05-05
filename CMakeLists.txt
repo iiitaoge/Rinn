@@ -74,6 +74,13 @@ add_executable(${PROJECT_NAME}
     src/Systems/InputSystem.hpp
     src/Systems/PhysicSystem.hpp
     src/Systems/CollisionSystem.hpp
+    src/Systems/MessageRoutingSystem.hpp
+    src/Systems/PerceptionSystem.hpp
+    src/Systems/AppraisalSystem.hpp
+    src/Systems/EmotionDecaySystem.hpp
+    src/Systems/DecisionSystem.hpp
+    src/Systems/ActionExecutionSystem.hpp
+    src/Systems/EventSystem.hpp
     src/UI/DebugUI.hpp
     src/UI/LightUI.hpp
 

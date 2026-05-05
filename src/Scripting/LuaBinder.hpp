@@ -1,5 +1,6 @@
 #pragma once
 #include <sol/sol.hpp>
+#include <cstring>
 #include "../Core/Registry.hpp"
 #include "../Components/Components.hpp"
 #include "../Resources/ResourceManager.hpp"
@@ -72,6 +73,26 @@ namespace Rinn {
 				strncpy(tb.text, t.c_str(), 255);
 				tb.display_time = data.get<float>("time"); // 移除 get_or，强制要求必须传入 time
 			}
+			else if (name == "Need") {
+				auto read_need_array = [](sol::table values) {
+					std::array<float, NeedComponent::N> result{};
+					for (int i = 0; i < NeedComponent::N; ++i) {
+						result[i] = values[i + 1].get_or(0.0f);
+					}
+					return result;
+				};
+
+				NeedComponent need{
+					read_need_array(data.get<sol::table>("weights")),
+					read_need_array(data.get<sol::table>("satisfaction")),
+					read_need_array(data.get<sol::table>("expectation"))
+				};
+
+				if (reg.has<Rinn::NeedComponent>(e)) {
+					reg.remove<Rinn::NeedComponent>(e);
+				}
+				reg.emplace<Rinn::NeedComponent>(e, need);
+			}
 			});
 
 		// 绑定移除组件
@@ -84,6 +105,9 @@ namespace Rinn {
 			}
 			else if (name == "Sprite") {
 				if(reg.has<Sprite>(e)) reg.remove<Sprite>(e);
+			}
+			else if (name == "Need") {
+				if(reg.has<NeedComponent>(e)) reg.remove<NeedComponent>(e);
 			}
 			});
 

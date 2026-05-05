@@ -1,5 +1,8 @@
 #pragma once
+#include "../Core/Types.hpp"
 #include <raylib.h>
+#include <array>
+#include <bitset>
 #include <type_traits>
 
 namespace Rinn{
@@ -44,6 +47,55 @@ namespace Rinn{
         uint16_t mask  = 0xFFFF;      // 我和哪些层发生碰撞（位掩码）
     };
 
+    // ─── NPC 自身 ───
+
+    struct NeedComponent {
+        static constexpr int N = 6;  // 资源/社交/亲情/安全/信仰/好奇心
+        std::array<float, N> weights;        // 稳态人格
+        std::array<float, N> satisfaction;   // 当前满足度
+        std::array<float, N> expectation;    // 对未来满足度的预测
+    };
+
+    struct EmotionComponent {
+        static constexpr int E = 5;  // 愤怒/焦虑/恐慌/悲伤/孤独
+        std::array<float, E> intensity;
+        std::array<Entity, E> target;        // 情绪指向（可 null）
+        std::array<float, E> decay_rate;
+    };
+
+    struct DecisionComponent {
+        Entity current_action_target;
+        uint16_t current_action_id;          // 索引到 Lua action catalog
+        float action_progress;
+        uint32_t next_decision_tick;
+    };
+
+    struct PerceptionComponent {
+        static constexpr int INBOX = 16;
+        std::array<uint32_t, INBOX> pending; // EventId 队列
+        uint8_t head, tail;
+    };
+
+    struct StoneTabletComponent {
+        bool online;
+        Entity owner;
+        int8_t broadcast_range;
+    };
+
+    // ─── Edge 实体上挂的 ───
+
+    struct RelationComponent {
+        Entity from, to;
+        int8_t affinity;     // -100..100
+        int8_t power_diff;   // from 相对 to 的权力差
+    };
+
+    struct KnowledgeFactComponent {
+        uint32_t fact_type;       // enum: TaxRaised, SonDied, Rumor, ...
+        Entity subject;
+        uint32_t timestamp;
+        std::bitset<MAX_ENTITIES> knowers;   // ← 信息差的核心
+    };
 
 
     // ====================================================================
@@ -68,6 +120,13 @@ namespace Rinn{
     static_assert(std::is_aggregate_v<Velocity>,   "Velocity must be aggregate");
     static_assert(std::is_aggregate_v<Collider>,   "Collider must be aggregate");
     static_assert(std::is_aggregate_v<TextBubble>, "TextBubble must be aggregate");
+    static_assert(std::is_aggregate_v<NeedComponent>, "NeedComponent must be aggregate");
+    static_assert(std::is_aggregate_v<EmotionComponent>, "EmotionComponent must be aggregate");
+    static_assert(std::is_aggregate_v<DecisionComponent>, "DecisionComponent must be aggregate");
+    static_assert(std::is_aggregate_v<PerceptionComponent>, "PerceptionComponent must be aggregate");
+    static_assert(std::is_aggregate_v<StoneTabletComponent>, "StoneTabletComponent must be aggregate");
+    static_assert(std::is_aggregate_v<RelationComponent>, "RelationComponent must be aggregate");
+    static_assert(std::is_aggregate_v<KnowledgeFactComponent>, "KnowledgeFactComponent must be aggregate");
 
     // 可序列化：trivially copyable + standard layout → memcpy 安全
     static_assert(std::is_trivially_copyable_v<Transform>, "Transform must be trivially copyable for serialization");
@@ -75,6 +134,13 @@ namespace Rinn{
     static_assert(std::is_trivially_copyable_v<Velocity>,  "Velocity must be trivially copyable for serialization");
     static_assert(std::is_trivially_copyable_v<Collider>,  "Collider must be trivially copyable for serialization");
     static_assert(std::is_trivially_copyable_v<TextBubble>,"TextBubble must be trivially copyable for serialization");
+    static_assert(std::is_trivially_copyable_v<NeedComponent>, "NeedComponent must be trivially copyable for serialization");
+    static_assert(std::is_trivially_copyable_v<EmotionComponent>, "EmotionComponent must be trivially copyable for serialization");
+    static_assert(std::is_trivially_copyable_v<DecisionComponent>, "DecisionComponent must be trivially copyable for serialization");
+    static_assert(std::is_trivially_copyable_v<PerceptionComponent>, "PerceptionComponent must be trivially copyable for serialization");
+    static_assert(std::is_trivially_copyable_v<StoneTabletComponent>, "StoneTabletComponent must be trivially copyable for serialization");
+    static_assert(std::is_trivially_copyable_v<RelationComponent>, "RelationComponent must be trivially copyable for serialization");
+    static_assert(std::is_trivially_copyable_v<KnowledgeFactComponent>, "KnowledgeFactComponent must be trivially copyable for serialization");
 
     // 标签组件：空类型
     static_assert(std::is_empty_v<IsPlayer>, "IsPlayer must be empty (tag component)");

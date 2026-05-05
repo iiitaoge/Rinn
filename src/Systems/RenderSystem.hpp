@@ -191,7 +191,7 @@ namespace Rinn::RenderSystem {
         // 2. rlBegin(RL_TRIANGLES)
         rlBegin(RL_TRIANGLES);
         float step = 2 * PI / 16;
-        float a1 = 0, a2 = 0, x = 0, z = 0;
+        float a1 = 0, a2 = 0;
         for (int i = 0; i < 16; i++) {
             a1 = step * i;
             a2 = step * (i + 1);
