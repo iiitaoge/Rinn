@@ -3,6 +3,7 @@
 #include "SparseSet.hpp"
 #include "ComponentID.hpp"
 #include "iostream"
+#include "../Components/Components.hpp"
 
 #ifdef _MSC_VER
 #include <intrin.h>   // _mm_prefetch

@@ -1,8 +1,6 @@
 
 #pragma once
-#include "../Components/Components.hpp"
 #include "../Core/Registry.hpp"
-#include <algorithm>
 
 namespace Rinn::PhysicSystem {
     // 纯积分器，边界交给lua处理

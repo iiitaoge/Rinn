@@ -116,6 +116,11 @@ if not player then
         satisfaction = { 4, 3, 0, 2, 1, 2 },
         expectation = { 2, 1, 0, 1, 1, 2 }
     })
+    set(player, "Emotion",{
+        intensity = { 4, 3, 2, 3, 2 },
+        target = { nil, nil, nil, nil, nil },
+        decay_rate = { 0.8, 0.3, 1.2, 0.3, 1.7 }
+    })
     print("[TEST] Manual player created at map center: " .. map_center_x .. ", " .. map_center_y)
 end
 -- ===============================================================

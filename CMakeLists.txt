@@ -81,7 +81,7 @@ add_executable(${PROJECT_NAME}
     src/Systems/DecisionSystem.hpp
     src/Systems/ActionExecutionSystem.hpp
     src/Systems/EventSystem.hpp
-    src/UI/DebugUI.hpp
+    src/UI/ComponentUI.hpp
     src/UI/LightUI.hpp
 
     # Dear ImGui 核心源文件

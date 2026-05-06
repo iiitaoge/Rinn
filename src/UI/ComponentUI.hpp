@@ -5,7 +5,7 @@
 #include "../Core/Registry.hpp"
 #include "../Components/Components.hpp"
 
-namespace Rinn::DebugUI {
+namespace Rinn::ComponentUI {
 
     // 初始化imgui
     inline void Init() { rlImGuiSetup(true); }
@@ -21,12 +21,14 @@ namespace Rinn::DebugUI {
         static bool show_sprite = false;
         static bool show_collider = false;
         static bool show_need = true;
+        static bool show_emotion = true;
         // ImGui::CheckboxFlags; // 横排勾选
         ImGui::Checkbox("Transform", &show_transform); ImGui::SameLine();
         ImGui::Checkbox("Velocity", &show_velocity);  ImGui::SameLine();
         ImGui::Checkbox("Sprite", &show_sprite);     ImGui::SameLine();
         ImGui::Checkbox("Collider", &show_collider); ImGui::SameLine();
         ImGui::Checkbox("Need", &show_need);
+        ImGui::Checkbox("Emotion", &show_emotion);
         ImGui::Separator();
         // 每个勾选的组件 → 直接遍历它的 pool
         if (show_transform) {
@@ -82,7 +84,37 @@ namespace Rinn::DebugUI {
                 ImGui::TreePop();
             }
         }
+        if (show_emotion) {
+            auto& pool = reg.pool<EmotionComponent>();
+            if (ImGui::TreeNode("Emotion", "Emotion (%zu)", pool.size())) {
+                constexpr const char* labels[EmotionComponent::E] = {
+                    "Anger", "Anxiety", "Panic", "Sadness", "Loneliness"
+                };
+                for (size_t i = 0; i < pool.size(); ++i) {
+                    Entity e = pool.raw_entity_data()[i];
+                    auto& emotion = pool.raw_data()[i];
+                    if (ImGui::TreeNode(reinterpret_cast<void*>(static_cast<intptr_t>(e.id)), "Entity [%d]", e.index())) {
+                        ImGui::Columns(3, "EmotionColumns", false);
+                        ImGui::Text("Emotion"); ImGui::NextColumn();
+                        ImGui::Text("intensity"); ImGui::NextColumn();
+                        ImGui::Text("decay_rate"); ImGui::NextColumn();
+                        ImGui::Separator();
 
+                        for (int e = 0; e < EmotionComponent::E; ++e) {
+                            ImGui::Text("%s", labels[e]); ImGui::NextColumn();
+                            ImGui::Text("%.1f", emotion.intensity[e]); ImGui::NextColumn();
+                            ImGui::Text("%.1f", emotion.decay_rate[e]); ImGui::NextColumn();
+                        }
+
+                        ImGui::Columns(1);
+                        ImGui::TreePop();
+                    }
+                }
+                ImGui::TreePop();
+
+            }
+
+        }
     }
 
     inline void DrawEntityPanel(Registry& reg) {

@@ -74,6 +74,7 @@ namespace Rinn {
 				tb.display_time = data.get<float>("time"); // 移除 get_or，强制要求必须传入 time
 			}
 			else if (name == "Need") {
+				// 函数定义
 				auto read_need_array = [](sol::table values) {
 					std::array<float, NeedComponent::N> result{};
 					for (int i = 0; i < NeedComponent::N; ++i) {
@@ -81,7 +82,7 @@ namespace Rinn {
 					}
 					return result;
 				};
-
+				// 调用函数
 				NeedComponent need{
 					read_need_array(data.get<sol::table>("weights")),
 					read_need_array(data.get<sol::table>("satisfaction")),
@@ -92,6 +93,34 @@ namespace Rinn {
 					reg.remove<Rinn::NeedComponent>(e);
 				}
 				reg.emplace<Rinn::NeedComponent>(e, need);
+			}
+			else if (name == "Emotion") {
+				auto read_emotion_array = [](sol::table values) {
+					std::array<float, EmotionComponent::E> result{};
+					for (int i = 0; i < EmotionComponent::E; ++i) {
+						result[i] = values[i + 1].get_or(0.0f);
+					}
+					return result;
+				};
+				auto read_emotion_target = [](sol::table values) {
+					std::array<Entity, EmotionComponent::E> result{};
+					for (int i = 0; i < EmotionComponent::E; ++i) {
+						sol::optional<Entity> val = values[i + 1];
+						result[i] = val.value_or(Entity{});
+					}
+					return result;
+				};
+
+				EmotionComponent emotion = {
+					read_emotion_array(data.get<sol::table>("intensity")),
+					read_emotion_target(data.get<sol::table>("target")),
+					read_emotion_array(data.get<sol::table>("decay_rate"))
+				};
+
+				if (reg.has<Rinn::EmotionComponent>(e)) {
+					reg.remove<Rinn::EmotionComponent>(e);
+				}
+				reg.emplace<Rinn::EmotionComponent>(e, emotion);
 			}
 			});
 

@@ -9,7 +9,8 @@
 #include "Systems/PhysicSystem.hpp"
 #include "Systems/CollisionSystem.hpp"
 #include "Systems/AudioSystem.hpp"
-#include "UI/DebugUI.hpp"
+#include "Systems/EmotionDecaySystem.hpp"
+#include "UI/ComponentUI.hpp"
 #include "UI/LightUI.hpp"
 
 using namespace::Rinn;
@@ -19,7 +20,7 @@ int main() {
 
 	RenderSystem::Init(1600, 1400, "Rinn");
 	AudioSystem::Init();
-	DebugUI::Init();
+	ComponentUI::Init();
 
 	Registry reg;
 	ResourceManager res;
@@ -42,6 +43,9 @@ int main() {
 		auto hits = CollisionSystem::detect(reg);
 		CollisionSystem::resolve(reg, hits);
 
+		// NPC AI
+		EmotionDecaySystem::Update(reg, RenderSystem::DeltaTime());
+
 		// DrawGrid(40, 1.0f);  // 调试：XZ 平面参考网格（40格×1米）
 		BeginShaderMode(RenderSystem::test_shader);
 		RenderSystem::DrawSprites(reg, res);
@@ -56,7 +60,7 @@ int main() {
 		RenderSystem::DrawText(std::format("FPS: {}", RenderSystem::FPS()).c_str(), 10, 10, 20, GREEN);
 
 		rlImGuiBegin();
-		DebugUI::DrawEntityPanel(reg);
+		ComponentUI::DrawEntityPanel(reg);
 		LightUI::DrawLightPanel();
 		rlImGuiEnd();
 		RenderSystem::EndFrame();
