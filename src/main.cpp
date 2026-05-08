@@ -12,6 +12,7 @@
 #include "Systems/EmotionDecaySystem.hpp"
 #include "UI/ComponentUI.hpp"
 #include "UI/LightUI.hpp"
+#include "UI/AIDebugUI.hpp"
 
 using namespace::Rinn;
 
@@ -39,12 +40,15 @@ int main() {
 		RenderSystem::BeginFrame();
 		lua["on_update"]();  // 每帧调 Lua
 
-		PhysicSystem::update(reg, RenderSystem::DeltaTime());
+		// 全局可调 dt：暂停/单步/倍速 都汇集在 TimeControl
+		float dt = TimeControl::Tick(RenderSystem::DeltaTime());
+
+		PhysicSystem::update(reg, dt);
 		auto hits = CollisionSystem::detect(reg);
 		CollisionSystem::resolve(reg, hits);
 
 		// NPC AI
-		EmotionDecaySystem::Update(reg, RenderSystem::DeltaTime());
+		EmotionDecaySystem::Update(reg, dt);
 
 		// DrawGrid(40, 1.0f);  // 调试：XZ 平面参考网格（40格×1米）
 		BeginShaderMode(RenderSystem::test_shader);
@@ -62,6 +66,7 @@ int main() {
 		rlImGuiBegin();
 		ComponentUI::DrawEntityPanel(reg);
 		LightUI::DrawLightPanel();
+		AIDebugUI::Draw(reg);
 		rlImGuiEnd();
 		RenderSystem::EndFrame();
 	}
