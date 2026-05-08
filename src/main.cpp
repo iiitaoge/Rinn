@@ -10,6 +10,7 @@
 #include "Systems/CollisionSystem.hpp"
 #include "Systems/AudioSystem.hpp"
 #include "Systems/EmotionDecaySystem.hpp"
+#include "Systems/EventSystem.hpp"
 #include "UI/ComponentUI.hpp"
 #include "UI/LightUI.hpp"
 #include "UI/AIDebugUI.hpp"
@@ -35,7 +36,19 @@ int main() {
 		sol::error err = result;
 		std::cerr << "加载脚本失败: " << err.what() << std::endl;
 	}
-	
+
+	// EventBus -> EventLog: 所有 event 进 ring buffer 给 ImGui 显示
+	EventBus::SubscribeAll([](const EventBus::Event& e) {
+		char actor[8]  = "-";
+		char target[8] = "-";
+		if (!e.actor.is_null())  std::snprintf(actor,  sizeof(actor),  "E%u", e.actor.index());
+		if (!e.target.is_null()) std::snprintf(target, sizeof(target), "E%u", e.target.index());
+		EventLog::PushFmt(EventLog::Level::Info, "EventBus",
+			"%s actor=%s target=%s f=%.2f i=%d",
+			EventBus::TypeName(e.type),
+			actor, target, e.payload_f, e.payload_i);
+	});
+
 	while (!RenderSystem::ShouldClose()) {
 		RenderSystem::BeginFrame();
 		lua["on_update"]();  // 每帧调 Lua
@@ -49,6 +62,9 @@ int main() {
 
 		// NPC AI
 		EmotionDecaySystem::Update(reg, dt);
+
+		// 所有 system publish 完之后, drain 一次 (FIFO 同帧到空)
+		EventBus::Drain();
 
 		// DrawGrid(40, 1.0f);  // 调试：XZ 平面参考网格（40格×1米）
 		BeginShaderMode(RenderSystem::test_shader);

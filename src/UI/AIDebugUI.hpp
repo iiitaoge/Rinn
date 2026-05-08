@@ -2,6 +2,7 @@
 #include "imgui.h"
 #include "../Core/Registry.hpp"
 #include "../Components/Components.hpp"
+#include "../Systems/EventSystem.hpp"
 #include <array>
 #include <cstdio>
 #include <cstring>
@@ -260,11 +261,47 @@ namespace Rinn::NpcInspector {
     }
 }
 
+namespace Rinn::EventBusInspector {
+
+    // 一键 publish, 验证 bus -> EventLog 端到端
+    inline void PublishTestChain() {
+        using namespace EventBus;
+        Publish(Event{ EventType::TaxIncreased,   {}, {}, 0.10f, 0 });
+        Publish(Event{ EventType::PriestDied,     {}, {}, 0.0f,  0 });
+        Publish(Event{ EventType::HeardLastWords, {}, {}, 0.0f,  1 });
+    }
+
+    inline void Draw() {
+        ImGui::Begin("EventBus");
+
+        ImGui::Text("queue size:      %zu",  EventBus::queue.size());
+        ImGui::Text("drained / frame: %zu",  EventBus::last_drain_count);
+        ImGui::Text("total published: %zu",  EventBus::total_published);
+        ImGui::Text("typed subs:      %zu",  EventBus::subscribers.size());
+        ImGui::Text("wildcard subs:   %zu",  EventBus::wildcard_subscribers.size());
+
+        if (EventBus::last_drain_overflow) {
+            ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f),
+                               "OVERFLOW: drain hit MAX_DRAIN_PER_FRAME (cycle?)");
+        }
+
+        ImGui::Separator();
+        if (ImGui::Button("Publish Test Chain")) {
+            PublishTestChain();
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(Tax + PriestDied + HeardLastWords)");
+
+        ImGui::End();
+    }
+}
+
 namespace Rinn::AIDebugUI {
-    // 一次性绘制三个面板, 主循环只调这个
+    // 一次性绘制四个面板, 主循环只调这个
     inline void Draw(Registry& reg) {
         TimeControl::Draw();
         EventLog::Draw();
+        EventBusInspector::Draw();
         NpcInspector::Draw(reg);
     }
 }
