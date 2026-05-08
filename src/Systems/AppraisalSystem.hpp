@@ -133,6 +133,27 @@ namespace Rinn::AppraisalSystem {
         }
     }
 
+    // M6: BrokeDown 是 ActionExecution 完成 break_tablet 后 publish 的社交信号
+    // 旁观的 online NPC 应该恐慌+愤怒上升, 触发重决策 -> 跨 NPC 反应链
+    inline void handle_destruction(const EventBus::Event& e) {
+        if (!g_reg) return;
+        if (e.actor.is_null() || !g_reg->is_alive(e.actor)) return;
+
+        for (Entity npc : g_reg->view<NeedComponent, EmotionComponent, StoneTabletComponent>()) {
+            if (npc.id == e.actor.id) continue;  // actor 自己跳过
+            auto& tablet = g_reg->get<StoneTabletComponent>(npc);
+            if (!tablet.online) continue;
+
+            auto& emo = g_reg->get<EmotionComponent>(npc);
+            emo.intensity[2] = std::min(1.0f, emo.intensity[2] + 0.40f);  // panic
+            emo.intensity[0] = std::min(1.0f, emo.intensity[0] + 0.20f);  // anger
+
+            if (auto dec_opt = g_reg->try_get<DecisionComponent>(npc); dec_opt.has_value()) {
+                dec_opt->get().next_decision_tick = 0;
+            }
+        }
+    }
+
     inline void Init(Registry& reg) {
         g_reg = &reg;
         fact_index.clear();
@@ -140,8 +161,7 @@ namespace Rinn::AppraisalSystem {
         EventBus::Subscribe(EventBus::EventType::TaxIncreased,   handle_information);
         EventBus::Subscribe(EventBus::EventType::PriestDied,     handle_information);
         EventBus::Subscribe(EventBus::EventType::HeardLastWords, handle_information);
-        // M5/M6 同形态扩 (物质/社交/内省 handler):
-        // EventBus::Subscribe(EventType::TaxCollected, handle_material);
-        // EventBus::Subscribe(EventType::Insulted,     handle_social);
+        // M6: 跨 NPC 反应链
+        EventBus::Subscribe(EventBus::EventType::BrokeDown,      handle_destruction);
     }
 }

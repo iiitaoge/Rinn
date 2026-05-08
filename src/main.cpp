@@ -45,14 +45,12 @@ int main() {
 
 	// EventBus -> EventLog: 所有 event 进 ring buffer 给 ImGui 显示
 	EventBus::SubscribeAll([](const EventBus::Event& e) {
-		char actor[8]  = "-";
-		char target[8] = "-";
-		if (!e.actor.is_null())  std::snprintf(actor,  sizeof(actor),  "E%u", e.actor.index());
-		if (!e.target.is_null()) std::snprintf(target, sizeof(target), "E%u", e.target.index());
 		EventLog::PushFmt(EventLog::Level::Info, "EventBus",
 			"%s actor=%s target=%s f=%.2f i=%d",
 			EventBus::TypeName(e.type),
-			actor, target, e.payload_f, e.payload_i);
+			DemoVillage::NameOrId(e.actor).c_str(),
+			DemoVillage::NameOrId(e.target).c_str(),
+			e.payload_f, e.payload_i);
 	});
 
 	while (!RenderSystem::ShouldClose()) {

@@ -41,8 +41,9 @@ namespace Rinn::ActionExecutionSystem {
 
                 // 2. EventLog: 让每个 action 完成都可见 (M5 demo 验证用)
                 EventLog::PushFmt(EventLog::Level::Info, "Action",
-                    "E%u completed: %s (+%.2f to need[%d])",
-                    e.index(), act.name, act.gain, act.gain_need_idx);
+                    "%s completed: %s (+%.2f to need[%d])",
+                    DemoVillage::NameOrId(e).c_str(),
+                    act.name, act.gain, act.gain_need_idx);
 
                 // 3. publish 完成事件 (产生下一跳, 仅当 catalog 里指定了 complete_event)
                 if (act.complete_event != EventBus::EventType::None) {

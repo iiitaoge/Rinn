@@ -43,7 +43,7 @@ namespace Rinn::DecisionSystem {
         { "idle",              5,  0.05f, {0.0f, 0.0f, 0.0f, 0.0f, 0.0f},   1.0f, EventBus::EventType::None },
         { "talk_to_leader",    1,  0.40f, {1.5f, 0.5f, 0.0f, 0.0f, 0.0f},   4.0f, EventBus::EventType::None },
         { "break_tablet",      0,  0.30f, {2.5f, 0.0f, 0.0f, 0.0f, 0.0f},   2.5f, EventBus::EventType::BrokeDown },
-        { "hoard_resources",   3,  0.50f, {0.0f, 2.0f, 0.5f, 0.0f, 0.0f},   3.0f, EventBus::EventType::None },
+        { "hoard_resources",   3,  0.50f, {0.0f, 2.0f, 1.5f, 0.0f, 0.0f},   3.0f, EventBus::EventType::None },
         { "pray",              4,  0.40f, {0.0f, 0.0f, 0.0f, 0.5f, 0.5f},   3.0f, EventBus::EventType::None },
     };
 

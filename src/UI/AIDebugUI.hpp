@@ -9,7 +9,14 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdarg>
+#include <string>
+#include <unordered_map>
 #include <vector>
+
+// Forward decl: NpcInspector / EventBusInspector / KnowledgeInspector 都要用
+namespace Rinn::DemoVillage {
+    inline std::string NameOrId(Entity e);
+}
 
 // =====================================================================
 // AI Debug Infra — M3 前置工具集
@@ -273,9 +280,9 @@ namespace Rinn::NpcInspector {
         }
         for (size_t i = 0; i < need_pool.size(); ++i) {
             Entity e = need_pool.raw_entity_data()[i];
-            char label[32];
-            std::snprintf(label, sizeof(label), "Entity %d", e.index());
-            if (ImGui::Selectable(label, selected.id == e.id)) {
+            std::string label = DemoVillage::NameOrId(e);
+            label += " (E" + std::to_string(e.index()) + ")";
+            if (ImGui::Selectable(label.c_str(), selected.id == e.id)) {
                 selected = e;
             }
         }
@@ -309,20 +316,35 @@ namespace Rinn::NpcInspector {
 }
 
 // =====================================================================
-// DemoVillage - M4 验证场景: 1 leader + 3 NPC, 全部带 NeedComponent +
-// EmotionComponent + StoneTabletComponent. 用于跑加税广播 demo.
+// DemoVillage - M6 验证场景: 4 NPC + 命名 + Reset 支持
+//   [0] Leader      高安全权重, 广播者, online
+//   [1] Blacksmith  高资源权重, online
+//   [2] Priest      高信仰权重, online
+//   [3] Hermit      高安全权重, OFFLINE (验证信息差)
 // =====================================================================
 namespace Rinn::DemoVillage {
 
-    inline std::vector<Entity> npcs;     // [0] = leader, 其余是 receiver
+    inline std::vector<Entity> npcs;
+    inline std::unordered_map<uint32_t, std::string> entity_names;
     inline bool already_setup = false;
+
+    inline std::string NameOrId(Entity e) {
+        if (e.is_null()) return "-";
+        auto it = entity_names.find(e.id);
+        if (it != entity_names.end()) return it->second;
+        return std::string("E") + std::to_string(e.index());
+    }
+
+    inline Entity leader() { return npcs.empty() ? Entity{} : npcs[0]; }
 
     inline void Setup(Registry& reg) {
         if (already_setup) return;
         already_setup = true;
         npcs.clear();
+        entity_names.clear();
 
-        auto make_npc = [&](std::array<float, 6> w,
+        auto make_npc = [&](const char* name,
+                            std::array<float, 6> w,
                             std::array<float, 6> sat,
                             std::array<float, 6> exp,
                             bool tablet_online) -> Entity {
@@ -335,25 +357,106 @@ namespace Rinn::DemoVillage {
             });
             reg.emplace<StoneTabletComponent>(e, StoneTabletComponent{ tablet_online, Entity{}, 100 });
             reg.emplace<DecisionComponent>(e, DecisionComponent{
-                Entity{},   // current_action_target
-                0,          // current_action_id (idle)
-                1.0f,       // action_progress (1.0 = 等待重决策)
-                0           // next_decision_tick (立即决策)
+                Entity{}, 0, 1.0f, 0
             });
+            entity_names[e.id] = name;
             return e;
         };
 
-        // [0] leader: 高安全权重 + 安全缺口 -> 倾向 hoard
-        npcs.push_back(make_npc({3,2,3,5,2,1}, {5,4,4,3,4,2}, {5,4,4,5,4,2}, true));
-        // [1] blacksmith: 高资源权重 + 资源缺口 -> 倾向 break_tablet (怒火加成)
-        npcs.push_back(make_npc({5,3,4,2,1,2}, {3,3,4,3,1,3}, {5,3,4,3,1,3}, true));
-        // [2] priest: 高信仰权重 + 信仰缺口 -> 倾向 pray
-        npcs.push_back(make_npc({2,4,2,2,5,2}, {3,3,3,3,3,3}, {3,3,3,3,5,3}, true));
-        // [3] hermit: 高安全 + 离线 (验证: 不会收到加税, utility 不变)
-        npcs.push_back(make_npc({3,1,2,4,3,1}, {3,2,3,2,3,2}, {3,2,3,4,3,2}, false));
+        npcs.push_back(make_npc("Leader",
+            {3,2,3,5,2,1}, {5,4,4,3,4,2}, {5,4,4,5,4,2}, true));
+        npcs.push_back(make_npc("Blacksmith",
+            {5,3,4,2,1,2}, {3,3,4,3,1,3}, {5,3,4,3,1,3}, true));
+        npcs.push_back(make_npc("Priest",
+            {2,4,2,2,5,2}, {3,3,3,3,3,3}, {3,3,3,3,5,3}, true));
+        npcs.push_back(make_npc("Hermit",
+            {3,1,2,4,3,1}, {3,2,3,2,3,2}, {3,2,3,4,3,2}, false));
     }
 
-    inline Entity leader() { return npcs.empty() ? Entity{} : npcs[0]; }
+    // 销毁所有 NPC + 所有 fact entity, 清掉系统内缓存索引.
+    // 给 M6 答辩 demo: 一键重置, 重新 Setup 跑对照实验.
+    inline void Reset(Registry& reg) {
+        // 1. destroy NPC entities
+        for (Entity e : npcs) {
+            if (reg.is_alive(e)) reg.destroy_entity(e);
+        }
+        npcs.clear();
+        entity_names.clear();
+
+        // 2. destroy KnowledgeFact entities (避免 fact_index 残留)
+        std::vector<Entity> facts;
+        auto& fact_pool = reg.pool<KnowledgeFactComponent>();
+        for (size_t i = 0; i < fact_pool.size(); ++i) {
+            facts.push_back(fact_pool.raw_entity_data()[i]);
+        }
+        for (Entity f : facts) {
+            if (reg.is_alive(f)) reg.destroy_entity(f);
+        }
+
+        // 3. 清系统级缓存
+        AppraisalSystem::fact_index.clear();
+        DecisionSystem::last_scores.clear();
+        DecisionSystem::last_chosen.clear();
+
+        already_setup = false;
+    }
+}
+
+// =====================================================================
+// DemoControls - M6 答辩 demo 的 live 调参面板
+//   - 每 NPC 独立: 6 个 weight slider + tablet online toggle
+//   - Reset Village 按钮: 一键销毁重建
+//   - 选项: 重置后是否保留 Lua 创建的实体 (player) - 当前不动
+// =====================================================================
+namespace Rinn::DemoControls {
+
+    inline void Draw(Registry& reg) {
+        ImGui::Begin("Demo Controls (M6)");
+        ImGui::Text("Live tune weights / tablet -> watch utility shift");
+        ImGui::Separator();
+
+        if (DemoVillage::npcs.empty()) {
+            ImGui::TextDisabled("(no village - press 'Setup Demo Village' first)");
+            ImGui::End();
+            return;
+        }
+
+        constexpr const char* need_labels[6] = {
+            "Resource", "Social", "Family", "Safety", "Faith", "Curiosity"
+        };
+
+        for (size_t i = 0; i < DemoVillage::npcs.size(); ++i) {
+            Entity e = DemoVillage::npcs[i];
+            if (!reg.is_alive(e)) continue;
+            ImGui::PushID(static_cast<int>(i));
+
+            std::string title = DemoVillage::NameOrId(e) + " (E" + std::to_string(e.index()) + ")";
+            if (ImGui::CollapsingHeader(title.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+
+                if (auto opt = reg.try_get<StoneTabletComponent>(e); opt.has_value()) {
+                    ImGui::Checkbox("Tablet online", &opt->get().online);
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(offline -> 信息差)");
+                }
+                if (auto opt = reg.try_get<NeedComponent>(e); opt.has_value()) {
+                    auto& need = opt->get();
+                    for (int n = 0; n < NeedComponent::N; ++n) {
+                        ImGui::SliderFloat(need_labels[n], &need.weights[n], 0.0f, 8.0f, "%.1f");
+                    }
+                }
+            }
+            ImGui::PopID();
+        }
+
+        ImGui::Separator();
+        if (ImGui::Button("Reset Village")) {
+            DemoVillage::Reset(reg);
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(destroy + clear all state, then 'Setup' again)");
+
+        ImGui::End();
+    }
 }
 
 namespace Rinn::EventBusInspector {
@@ -444,13 +547,20 @@ namespace Rinn::KnowledgeInspector {
                     fc.subject.is_null() ? -1 : (int)fc.subject.index(),
                     fc.knowers.count())) {
 
-                ImGui::Text("Knowers (by Entity index):");
+                ImGui::Text("Knowers:");
                 ImGui::BeginChild("knowers", ImVec2(0, 80), true);
                 bool any = false;
                 for (size_t b = 0; b < fc.knowers.size(); ++b) {
                     if (fc.knowers.test(b)) {
                         if (any) ImGui::SameLine();
-                        ImGui::Text("E%zu", b);
+                        // 反查 entity_names 里 index == b 的 NPC
+                        std::string label;
+                        for (auto& kv : DemoVillage::entity_names) {
+                            Entity probe; probe.id = kv.first;
+                            if (probe.index() == b) { label = kv.second; break; }
+                        }
+                        if (label.empty()) label = "E" + std::to_string(b);
+                        ImGui::Text("%s", label.c_str());
                         any = true;
                     }
                 }
@@ -471,6 +581,7 @@ namespace Rinn::AIDebugUI {
         EventLog::Draw();
         EventBusInspector::Draw(reg);
         KnowledgeInspector::Draw(reg);
+        DemoControls::Draw(reg);
         NpcInspector::Draw(reg);
     }
 }
