@@ -1,6 +1,118 @@
 #pragma once
-#include "Core/Registry.hpp"
+#include "../Core/Registry.hpp"
+#include "../Components/Components.hpp"
+#include "EventSystem.hpp"
+#include <algorithm>
+#include <array>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+// =====================================================================
+// DecisionSystem - M5
+// ---------------------------------------------------------------------
+// Utility AI:  utility(a) = gain(a) * salience(need) * emotion_modulator(a)
+//   salience(need) = weight * max(0, expectation - satisfaction)
+//   emotion_modulator(a) = 1 + sum( emotion.intensity[i] * a.modulators[i] )
+//
+// 每 N tick 重决策一次 (DecisionComponent.next_decision_tick 控制).
+// 中断: AppraisalSystem 在情绪 delta 后置 next_decision_tick=0 触发立即重决.
+// =====================================================================
 
 namespace Rinn::DecisionSystem {
-    void Update(Registry& reg, float dt);
+
+    // ActionDef = action catalog 一项. 这块是数据, M6 会迁移到 Lua (scripts/ai/actions.lua).
+    // 字段语义:
+    //   gain_need_idx: 主要服务于哪个 need (NeedComponent 索引)
+    //                  0 资源 / 1 社交 / 2 亲情 / 3 安全 / 4 信仰 / 5 好奇心
+    //   gain         : 完成时给 satisfaction 的基础增量
+    //   modulators[5]: 情绪调制 (0 怒 1 焦 2 恐 3 悲 4 孤)
+    //   duration     : 执行秒数
+    struct ActionDef {
+        const char* name;
+        int   gain_need_idx;
+        float gain;
+        std::array<float, EmotionComponent::E> modulators;
+        float duration;
+        EventBus::EventType complete_event;  // None 表示无副作用
+    };
+
+    // 默认 catalog (M6 改成 Lua 加载)
+    inline std::vector<ActionDef> action_catalog = {
+        // name              need  gain  modulators (怒/焦/恐/悲/孤)        dur   complete_event
+        { "idle",              5,  0.05f, {0.0f, 0.0f, 0.0f, 0.0f, 0.0f},   1.0f, EventBus::EventType::None },
+        { "talk_to_leader",    1,  0.40f, {1.5f, 0.5f, 0.0f, 0.0f, 0.0f},   4.0f, EventBus::EventType::None },
+        { "break_tablet",      0,  0.30f, {2.5f, 0.0f, 0.0f, 0.0f, 0.0f},   2.5f, EventBus::EventType::BrokeDown },
+        { "hoard_resources",   3,  0.50f, {0.0f, 2.0f, 0.5f, 0.0f, 0.0f},   3.0f, EventBus::EventType::None },
+        { "pray",              4,  0.40f, {0.0f, 0.0f, 0.0f, 0.5f, 0.5f},   3.0f, EventBus::EventType::None },
+    };
+
+    inline uint32_t global_tick = 0;
+    inline uint32_t REDECIDE_INTERVAL_TICKS = 60;  // ~1s @ 60fps
+
+    // 调试: 记录每个 NPC 上一次决策时各 action 的 utility 分数
+    inline std::unordered_map<uint32_t, std::vector<float>> last_scores;
+    inline std::unordered_map<uint32_t, int>                last_chosen;
+
+    inline float compute_utility(const NeedComponent& need,
+                                 const EmotionComponent& emo,
+                                 const ActionDef& a) {
+        int ni = a.gain_need_idx;
+        if (ni < 0 || ni >= NeedComponent::N) return 0.0f;
+
+        float gap = std::max(0.0f, need.expectation[ni] - need.satisfaction[ni]);
+        float salience = need.weights[ni] * gap;
+
+        float modulator = 1.0f;  // base = 1 (没情绪也不归零)
+        for (int i = 0; i < EmotionComponent::E; ++i) {
+            modulator += emo.intensity[i] * a.modulators[i];
+        }
+
+        return a.gain * salience * modulator;
+    }
+
+    // 强制 NPC 立即重决策 (AppraisalSystem 中断时调)
+    inline void RequestRedecide(Registry& reg, Entity e) {
+        if (auto opt = reg.try_get<DecisionComponent>(e); opt.has_value()) {
+            opt->get().next_decision_tick = 0;
+        }
+    }
+
+    inline void Update(Registry& reg, float dt) {
+        (void)dt;
+        ++global_tick;
+
+        for (Entity e : reg.view<NeedComponent, EmotionComponent, DecisionComponent>()) {
+            auto& dec = reg.get<DecisionComponent>(e);
+            if (global_tick < dec.next_decision_tick) continue;
+
+            auto& need = reg.get<NeedComponent>(e);
+            auto& emo  = reg.get<EmotionComponent>(e);
+
+            float best_u   = -1.0f;
+            int   best_id  = 0;
+
+            std::vector<float>& scores = last_scores[e.id];
+            scores.assign(action_catalog.size(), 0.0f);
+
+            for (size_t i = 0; i < action_catalog.size(); ++i) {
+                float u = compute_utility(need, emo, action_catalog[i]);
+                scores[i] = u;
+                if (u > best_u) {
+                    best_u  = u;
+                    best_id = static_cast<int>(i);
+                }
+            }
+
+            // 切动作 -> 重置 progress.  同动作但已完成 -> 也重置以重新执行
+            bool changed = (dec.current_action_id != static_cast<uint16_t>(best_id));
+            dec.current_action_id = static_cast<uint16_t>(best_id);
+            if (changed || dec.action_progress >= 1.0f) {
+                dec.action_progress = 0.0f;
+            }
+            last_chosen[e.id] = best_id;
+
+            dec.next_decision_tick = global_tick + REDECIDE_INTERVAL_TICKS;
+        }
+    }
 }

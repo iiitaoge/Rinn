@@ -125,6 +125,11 @@ namespace Rinn::AppraisalSystem {
                 fact_data.knowers.set(idx);
             }
             apply_appraisal_effects(npc, e);
+
+            // M5 priority B 中断: 信息事件改变情绪 -> 强制 NPC 重决策
+            if (auto dec_opt = g_reg->try_get<DecisionComponent>(npc); dec_opt.has_value()) {
+                dec_opt->get().next_decision_tick = 0;
+            }
         }
     }
 

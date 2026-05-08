@@ -12,6 +12,8 @@
 #include "Systems/EmotionDecaySystem.hpp"
 #include "Systems/EventSystem.hpp"
 #include "Systems/AppraisalSystem.hpp"
+#include "Systems/DecisionSystem.hpp"
+#include "Systems/ActionExecutionSystem.hpp"
 #include "UI/ComponentUI.hpp"
 #include "UI/LightUI.hpp"
 #include "UI/AIDebugUI.hpp"
@@ -64,8 +66,10 @@ int main() {
 		auto hits = CollisionSystem::detect(reg);
 		CollisionSystem::resolve(reg, hits);
 
-		// NPC AI
+		// NPC AI pipeline (M2 -> M5)
 		EmotionDecaySystem::Update(reg, dt);
+		DecisionSystem::Update(reg, dt);
+		ActionExecutionSystem::Update(reg, dt);
 
 		// 所有 system publish 完之后, drain 一次 (FIFO 同帧到空)
 		EventBus::Drain();

@@ -4,6 +4,7 @@
 #include "../Components/Components.hpp"
 #include "../Systems/EventSystem.hpp"
 #include "../Systems/AppraisalSystem.hpp"
+#include "../Systems/DecisionSystem.hpp"
 #include <array>
 #include <cstdio>
 #include <cstring>
@@ -214,6 +215,51 @@ namespace Rinn::NpcInspector {
             ImGui::Columns(1);
             ImGui::TreePop();
         }
+
+        // M5: 当前 action + progress + 上一次决策的 utility 分数表
+        inline void DrawDecision(Entity npc, const DecisionComponent& d) {
+            if (!ImGui::TreeNode("Decision")) return;
+
+            const auto& cat = DecisionSystem::action_catalog;
+            const char* cur_name = (d.current_action_id < cat.size())
+                ? cat[d.current_action_id].name : "<invalid>";
+
+            ImGui::Text("Current action:    %s (id=%u)", cur_name, d.current_action_id);
+            ImGui::Text("Progress:          %.2f", d.action_progress);
+            ImGui::Text("Next decision tick %u (now %u)",
+                        d.next_decision_tick, DecisionSystem::global_tick);
+
+            ImGui::Separator();
+            ImGui::Text("Last utility scores:");
+
+            auto it = DecisionSystem::last_scores.find(npc.id);
+            if (it == DecisionSystem::last_scores.end() || it->second.empty()) {
+                ImGui::TextDisabled("(no decision yet)");
+                ImGui::TreePop();
+                return;
+            }
+            const auto& scores = it->second;
+            int chosen = -1;
+            if (auto cit = DecisionSystem::last_chosen.find(npc.id);
+                cit != DecisionSystem::last_chosen.end()) chosen = cit->second;
+
+            ImGui::Columns(2, "InspectorActionCols", false);
+            ImGui::Text("Action");  ImGui::NextColumn();
+            ImGui::Text("Utility"); ImGui::NextColumn();
+            ImGui::Separator();
+            for (size_t i = 0; i < scores.size() && i < cat.size(); ++i) {
+                if (static_cast<int>(i) == chosen) {
+                    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "%s *", cat[i].name);
+                } else {
+                    ImGui::Text("%s", cat[i].name);
+                }
+                ImGui::NextColumn();
+                ImGui::Text("%.3f", scores[i]);
+                ImGui::NextColumn();
+            }
+            ImGui::Columns(1);
+            ImGui::TreePop();
+        }
     }
 
     inline void Draw(Registry& reg) {
@@ -250,10 +296,9 @@ namespace Rinn::NpcInspector {
             if (auto opt = reg.try_get<EmotionComponent>(selected); opt.has_value()) {
                 detail::DrawEmotion(opt->get());
             }
-            // M3-M5 加新组件:
-            // if (auto opt = reg.try_get<DecisionComponent>(selected); opt.has_value())
-            //     detail::DrawDecision(opt->get());
-            // ...
+            if (auto opt = reg.try_get<DecisionComponent>(selected); opt.has_value()) {
+                detail::DrawDecision(selected, opt->get());
+            }
         } else {
             ImGui::TextDisabled("← Select an NPC on the left");
         }
@@ -289,17 +334,23 @@ namespace Rinn::DemoVillage {
                 {0.10f, 0.10f, 0.20f, 0.05f, 0.05f}
             });
             reg.emplace<StoneTabletComponent>(e, StoneTabletComponent{ tablet_online, Entity{}, 100 });
+            reg.emplace<DecisionComponent>(e, DecisionComponent{
+                Entity{},   // current_action_target
+                0,          // current_action_id (idle)
+                1.0f,       // action_progress (1.0 = 等待重决策)
+                0           // next_decision_tick (立即决策)
+            });
             return e;
         };
 
-        // [0] leader: 资源/安全 高权重, online
-        npcs.push_back(make_npc({4,2,3,5,1,1}, {6,5,4,5,2,3}, {6,5,4,5,2,3}, true));
-        // [1] blacksmith: 资源 高权重, online
-        npcs.push_back(make_npc({5,3,5,2,1,2}, {4,3,0,2,1,2}, {6,3,0,3,1,2}, true));
-        // [2] priest: 信仰 高权重, online
-        npcs.push_back(make_npc({2,4,2,2,5,2}, {3,4,3,3,5,3}, {3,4,3,3,5,3}, true));
-        // [3] hermit: 离线 (验证: 不会收到加税)
-        npcs.push_back(make_npc({3,1,2,5,3,1}, {3,2,2,4,3,2}, {3,2,2,4,3,2}, false));
+        // [0] leader: 高安全权重 + 安全缺口 -> 倾向 hoard
+        npcs.push_back(make_npc({3,2,3,5,2,1}, {5,4,4,3,4,2}, {5,4,4,5,4,2}, true));
+        // [1] blacksmith: 高资源权重 + 资源缺口 -> 倾向 break_tablet (怒火加成)
+        npcs.push_back(make_npc({5,3,4,2,1,2}, {3,3,4,3,1,3}, {5,3,4,3,1,3}, true));
+        // [2] priest: 高信仰权重 + 信仰缺口 -> 倾向 pray
+        npcs.push_back(make_npc({2,4,2,2,5,2}, {3,3,3,3,3,3}, {3,3,3,3,5,3}, true));
+        // [3] hermit: 高安全 + 离线 (验证: 不会收到加税, utility 不变)
+        npcs.push_back(make_npc({3,1,2,4,3,1}, {3,2,3,2,3,2}, {3,2,3,4,3,2}, false));
     }
 
     inline Entity leader() { return npcs.empty() ? Entity{} : npcs[0]; }
