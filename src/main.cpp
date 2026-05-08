@@ -11,6 +11,7 @@
 #include "Systems/AudioSystem.hpp"
 #include "Systems/EmotionDecaySystem.hpp"
 #include "Systems/EventSystem.hpp"
+#include "Systems/AppraisalSystem.hpp"
 #include "UI/ComponentUI.hpp"
 #include "UI/LightUI.hpp"
 #include "UI/AIDebugUI.hpp"
@@ -36,6 +37,9 @@ int main() {
 		sol::error err = result;
 		std::cerr << "加载脚本失败: " << err.what() << std::endl;
 	}
+
+	// AppraisalSystem 注册 4 个信息事件 handler (M4)
+	AppraisalSystem::Init(reg);
 
 	// EventBus -> EventLog: 所有 event 进 ring buffer 给 ImGui 显示
 	EventBus::SubscribeAll([](const EventBus::Event& e) {

@@ -3,10 +3,12 @@
 #include "../Core/Registry.hpp"
 #include "../Components/Components.hpp"
 #include "../Systems/EventSystem.hpp"
+#include "../Systems/AppraisalSystem.hpp"
 #include <array>
 #include <cstdio>
 #include <cstring>
 #include <cstdarg>
+#include <vector>
 
 // =====================================================================
 // AI Debug Infra — M3 前置工具集
@@ -261,17 +263,51 @@ namespace Rinn::NpcInspector {
     }
 }
 
-namespace Rinn::EventBusInspector {
+// =====================================================================
+// DemoVillage - M4 验证场景: 1 leader + 3 NPC, 全部带 NeedComponent +
+// EmotionComponent + StoneTabletComponent. 用于跑加税广播 demo.
+// =====================================================================
+namespace Rinn::DemoVillage {
 
-    // 一键 publish, 验证 bus -> EventLog 端到端
-    inline void PublishTestChain() {
-        using namespace EventBus;
-        Publish(Event{ EventType::TaxIncreased,   {}, {}, 0.10f, 0 });
-        Publish(Event{ EventType::PriestDied,     {}, {}, 0.0f,  0 });
-        Publish(Event{ EventType::HeardLastWords, {}, {}, 0.0f,  1 });
+    inline std::vector<Entity> npcs;     // [0] = leader, 其余是 receiver
+    inline bool already_setup = false;
+
+    inline void Setup(Registry& reg) {
+        if (already_setup) return;
+        already_setup = true;
+        npcs.clear();
+
+        auto make_npc = [&](std::array<float, 6> w,
+                            std::array<float, 6> sat,
+                            std::array<float, 6> exp,
+                            bool tablet_online) -> Entity {
+            Entity e = reg.create_entity();
+            reg.emplace<NeedComponent>(e, NeedComponent{ w, sat, exp });
+            reg.emplace<EmotionComponent>(e, EmotionComponent{
+                {0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+                {Entity{}, Entity{}, Entity{}, Entity{}, Entity{}},
+                {0.10f, 0.10f, 0.20f, 0.05f, 0.05f}
+            });
+            reg.emplace<StoneTabletComponent>(e, StoneTabletComponent{ tablet_online, Entity{}, 100 });
+            return e;
+        };
+
+        // [0] leader: 资源/安全 高权重, online
+        npcs.push_back(make_npc({4,2,3,5,1,1}, {6,5,4,5,2,3}, {6,5,4,5,2,3}, true));
+        // [1] blacksmith: 资源 高权重, online
+        npcs.push_back(make_npc({5,3,5,2,1,2}, {4,3,0,2,1,2}, {6,3,0,3,1,2}, true));
+        // [2] priest: 信仰 高权重, online
+        npcs.push_back(make_npc({2,4,2,2,5,2}, {3,4,3,3,5,3}, {3,4,3,3,5,3}, true));
+        // [3] hermit: 离线 (验证: 不会收到加税)
+        npcs.push_back(make_npc({3,1,2,5,3,1}, {3,2,2,4,3,2}, {3,2,2,4,3,2}, false));
     }
 
-    inline void Draw() {
+    inline Entity leader() { return npcs.empty() ? Entity{} : npcs[0]; }
+}
+
+namespace Rinn::EventBusInspector {
+
+    inline void Draw(Registry& reg) {
         ImGui::Begin("EventBus");
 
         ImGui::Text("queue size:      %zu",  EventBus::queue.size());
@@ -286,22 +322,104 @@ namespace Rinn::EventBusInspector {
         }
 
         ImGui::Separator();
-        if (ImGui::Button("Publish Test Chain")) {
-            PublishTestChain();
+
+        // M4 demo: 一键拉起测试村庄
+        if (!DemoVillage::already_setup) {
+            if (ImGui::Button("Setup Demo Village (M4)")) {
+                DemoVillage::Setup(reg);
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("(spawn 4 NPCs: leader + 2 online + 1 offline hermit)");
+        } else {
+            ImGui::Text("Demo village ready: %zu NPCs, leader = E%u",
+                        DemoVillage::npcs.size(),
+                        DemoVillage::leader().is_null() ? 0u
+                            : (unsigned)DemoVillage::leader().index());
         }
+
+        // M4 demo: 触发加税广播 (用 leader 做 actor)
+        bool can_broadcast = !DemoVillage::leader().is_null();
+        if (!can_broadcast) ImGui::BeginDisabled();
+        if (ImGui::Button("Tax Raise (10%)")) {
+            EventBus::Publish(EventBus::Event{
+                EventBus::EventType::TaxIncreased,
+                DemoVillage::leader(), {}, 0.10f, 0
+            });
+        }
+        if (!can_broadcast) ImGui::EndDisabled();
         ImGui::SameLine();
-        ImGui::TextDisabled("(Tax + PriestDied + HeardLastWords)");
+        ImGui::TextDisabled("(broadcasts via leader's tablet)");
+
+        if (ImGui::Button("Priest Died")) {
+            EventBus::Publish(EventBus::Event{
+                EventBus::EventType::PriestDied,
+                DemoVillage::leader(), {}, 0.0f, 0
+            });
+        }
 
         ImGui::End();
     }
 }
 
+// =====================================================================
+// KnowledgeInspector - M4 主验证面板
+// 列出所有 KnowledgeFact entity + 每条 fact 的 knowers (谁知道)
+// =====================================================================
+namespace Rinn::KnowledgeInspector {
+
+    inline void Draw(Registry& reg) {
+        ImGui::Begin("Knowledge");
+
+        auto& fact_pool = reg.pool<KnowledgeFactComponent>();
+        ImGui::Text("Active facts: %zu", fact_pool.size());
+        ImGui::Text("fact_index size: %zu", AppraisalSystem::fact_index.size());
+        ImGui::Separator();
+
+        if (fact_pool.size() == 0) {
+            ImGui::TextDisabled("(no facts yet — trigger a broadcast)");
+            ImGui::End();
+            return;
+        }
+
+        for (size_t i = 0; i < fact_pool.size(); ++i) {
+            Entity fact_e = fact_pool.raw_entity_data()[i];
+            auto& fc = reg.get<KnowledgeFactComponent>(fact_e);
+
+            const char* name = EventBus::TypeName(static_cast<EventBus::EventType>(fc.fact_type));
+            ImGui::PushID(static_cast<int>(fact_e.id));
+
+            if (ImGui::TreeNode(name, "%s  [E%u]  subject=E%d  knowers=%zu",
+                    name, fact_e.index(),
+                    fc.subject.is_null() ? -1 : (int)fc.subject.index(),
+                    fc.knowers.count())) {
+
+                ImGui::Text("Knowers (by Entity index):");
+                ImGui::BeginChild("knowers", ImVec2(0, 80), true);
+                bool any = false;
+                for (size_t b = 0; b < fc.knowers.size(); ++b) {
+                    if (fc.knowers.test(b)) {
+                        if (any) ImGui::SameLine();
+                        ImGui::Text("E%zu", b);
+                        any = true;
+                    }
+                }
+                if (!any) ImGui::TextDisabled("(nobody yet)");
+                ImGui::EndChild();
+                ImGui::TreePop();
+            }
+            ImGui::PopID();
+        }
+        ImGui::End();
+    }
+}
+
 namespace Rinn::AIDebugUI {
-    // 一次性绘制四个面板, 主循环只调这个
+    // 一次性绘制所有面板, 主循环只调这个
     inline void Draw(Registry& reg) {
         TimeControl::Draw();
         EventLog::Draw();
-        EventBusInspector::Draw();
+        EventBusInspector::Draw(reg);
+        KnowledgeInspector::Draw(reg);
         NpcInspector::Draw(reg);
     }
 }
