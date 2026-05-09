@@ -27,12 +27,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "thesis/abstract.md",
+                "file": "m6-emergence-extension-spec.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "abstract"
+              "title": "m6-emergence-extension-spec"
             }
           }
         ],
@@ -200,6 +200,7 @@
   },
   "active": "002edc02d8e09358",
   "lastOpenFiles": [
+    "thesis/abstract.md",
     "conversation-2026-04-25-225420.txt",
     "thesis/04_ecs_core.md",
     "thesis/03_architecture.md",
@@ -210,7 +211,6 @@
     "thesis/03_architecture.md.tmp.28196.1777169910887",
     "thesis/02_background.md.tmp.28196.1777169826039",
     "thesis/01_intro.md.tmp.28196.1777169671940",
-    "thesis/abstract.md",
     "thesis/00_outline.md.tmp.28196.1777169184350",
     "thesis",
     "计算机科学与工程学院毕业设计（论文）撰写规范(2025).doc",

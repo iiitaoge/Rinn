@@ -169,14 +169,25 @@ namespace Rinn::RenderSystem {
         for (Entity e : reg.view<Transform, TextBubble>()) {
             const auto& t = reg.get<Transform>(e);
             const auto& tb = reg.get<TextBubble>(e);
-            
-            Vector3 pos3D = { t.x * WORLD_SCALE, 0.0f, t.y * WORLD_SCALE };
+
+            float sprite_height = 64.0f;
+            if (auto sprite_opt = reg.try_get<Sprite>(e); sprite_opt.has_value()) {
+                sprite_height = sprite_opt->get().height;
+            }
+
+            Vector3 pos3D = {
+                t.x * WORLD_SCALE,
+                sprite_height * WORLD_SCALE,
+                t.y * WORLD_SCALE
+            };
             Vector2 screen_pos = GetWorldToScreen(pos3D, camera);
             
             // 美观绘制黑边白底对话气泡
-            int text_width = MeasureTextEx(chinese_font, tb.text, 24, 2).x;
-            int draw_x = screen_pos.x - text_width / 2;
-            int draw_y = screen_pos.y - 70; // 悬浮在人物头顶
+            Vector2 text_size = MeasureTextEx(chinese_font, tb.text, 24, 2);
+            int text_width = static_cast<int>(text_size.x);
+            int bubble_height = 40;
+            int draw_x = static_cast<int>(screen_pos.x - text_width / 2.0f);
+            int draw_y = static_cast<int>(screen_pos.y - bubble_height - 14.0f);
             
             DrawRectangle(draw_x - 10, draw_y - 10, text_width + 20, 40, { 255, 255, 255, 220 });
             DrawRectangleLines(draw_x - 10, draw_y - 10, text_width + 20, 40, { 50, 50, 50, 255 });

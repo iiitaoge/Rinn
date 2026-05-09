@@ -3,6 +3,7 @@
 #include "../Core/Registry.hpp"
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <cstdint>
 
 namespace Rinn::CollisionSystem {
@@ -49,7 +50,7 @@ namespace Rinn::CollisionSystem {
     // 碰撞层掩码过滤
     // ================================================================
     inline bool layers_match(const Collider& ca, const Collider& cb) {
-        return (ca.layer & cb.mask) || (cb.layer & ca.mask);
+        return (ca.layer & cb.mask) && (cb.layer & ca.mask);
     }
 
     // ================================================================
@@ -64,6 +65,7 @@ namespace Rinn::CollisionSystem {
 
         // 2. 只让动态实体（有 Velocity）发起查询
         std::vector<Hit> hits;
+        std::unordered_set<uint64_t> seen_pairs;
         for (Entity a : reg.view<Transform, Collider, Velocity>()) {
             const auto& ta = reg.get<Transform>(a);
             const auto& ca = reg.get<Collider>(a);
@@ -82,7 +84,11 @@ namespace Rinn::CollisionSystem {
                     auto it = grid.find(cell_key(cx, cy));
                     if (it == grid.end()) continue;
                     for (Entity b : it->second) {
-                        if (a.index() >= b.index()) continue; // 避免重复对和自碰撞
+                        if (a.id == b.id) continue;
+                        uint32_t lo = std::min(a.id, b.id);
+                        uint32_t hi = std::max(a.id, b.id);
+                        uint64_t pair_key = (uint64_t(lo) << 32) | uint64_t(hi);
+                        if (!seen_pairs.insert(pair_key).second) continue;
                         const auto& cb = reg.get<Collider>(b);
                         if (!layers_match(ca, cb)) continue;  // 碰撞层过滤
                         const auto& tb = reg.get<Transform>(b);

@@ -23,10 +23,30 @@ namespace Rinn::EventBus {
 
     enum class EventType : uint16_t {
         None = 0,
+        // ─── 信息事件 (M4) ──────────────────────────────
         TaxIncreased,
         PriestDied,
         HeardLastWords,
-        BrokeDown,
+        // ─── 愤怒系动作完成 ───────────────────────────────
+        BrokeDown,           // break_tablet
+        TaxRefused,          // refuse_tax
+        ConfrontedLeader,    // confront_leader
+        // ─── 焦虑系动作完成 ───────────────────────────────
+        Hoarded,             // hoard_resources
+        HidMoney,            // hide_money
+        PrepaidMiners,       // prepay_miners
+        // ─── 恐慌系动作完成 ───────────────────────────────
+        ClosedDoors,         // close_doors
+        FeignedIllness,      // feign_illness
+        Flattered,           // flatter
+        // ─── 孤独系动作完成 ───────────────────────────────
+        VisitedFriend,       // visit_friend
+        WentToTavern,        // go_tavern
+        AttendedFuneral,     // attend_funeral
+        // ─── 悲伤系动作完成 ───────────────────────────────
+        ConfidedGrief,       // confide_grief
+        Prayed,              // pray
+        SankIntoGrief,       // sink_into_grief
     };
 
     struct Event {
@@ -96,11 +116,25 @@ namespace Rinn::EventBus {
 
     inline const char* TypeName(EventType t) {
         switch (t) {
-            case EventType::None:           return "None";
-            case EventType::TaxIncreased:   return "TaxIncreased";
-            case EventType::PriestDied:     return "PriestDied";
-            case EventType::HeardLastWords: return "HeardLastWords";
-            case EventType::BrokeDown:      return "BrokeDown";
+            case EventType::None:             return "None";
+            case EventType::TaxIncreased:     return "TaxIncreased";
+            case EventType::PriestDied:       return "PriestDied";
+            case EventType::HeardLastWords:   return "HeardLastWords";
+            case EventType::BrokeDown:        return "BrokeDown";
+            case EventType::TaxRefused:       return "TaxRefused";
+            case EventType::ConfrontedLeader: return "ConfrontedLeader";
+            case EventType::Hoarded:          return "Hoarded";
+            case EventType::HidMoney:         return "HidMoney";
+            case EventType::PrepaidMiners:    return "PrepaidMiners";
+            case EventType::ClosedDoors:      return "ClosedDoors";
+            case EventType::FeignedIllness:   return "FeignedIllness";
+            case EventType::Flattered:        return "Flattered";
+            case EventType::VisitedFriend:    return "VisitedFriend";
+            case EventType::WentToTavern:     return "WentToTavern";
+            case EventType::AttendedFuneral:  return "AttendedFuneral";
+            case EventType::ConfidedGrief:    return "ConfidedGrief";
+            case EventType::Prayed:           return "Prayed";
+            case EventType::SankIntoGrief:    return "SankIntoGrief";
         }
         return "<unknown>";
     }

@@ -34,6 +34,11 @@ namespace Rinn{
         float display_time = 0.0f;
     };
 
+    struct IdentityComponent {
+        char name[32] = { 0 };
+        char display_name[32] = { 0 };
+    };
+
     struct Velocity {
         float vx, vy;
     };
@@ -120,6 +125,7 @@ namespace Rinn{
     static_assert(std::is_aggregate_v<Velocity>,   "Velocity must be aggregate");
     static_assert(std::is_aggregate_v<Collider>,   "Collider must be aggregate");
     static_assert(std::is_aggregate_v<TextBubble>, "TextBubble must be aggregate");
+    static_assert(std::is_aggregate_v<IdentityComponent>, "IdentityComponent must be aggregate");
     static_assert(std::is_aggregate_v<NeedComponent>, "NeedComponent must be aggregate");
     static_assert(std::is_aggregate_v<EmotionComponent>, "EmotionComponent must be aggregate");
     static_assert(std::is_aggregate_v<DecisionComponent>, "DecisionComponent must be aggregate");
@@ -134,6 +140,7 @@ namespace Rinn{
     static_assert(std::is_trivially_copyable_v<Velocity>,  "Velocity must be trivially copyable for serialization");
     static_assert(std::is_trivially_copyable_v<Collider>,  "Collider must be trivially copyable for serialization");
     static_assert(std::is_trivially_copyable_v<TextBubble>,"TextBubble must be trivially copyable for serialization");
+    static_assert(std::is_trivially_copyable_v<IdentityComponent>,"IdentityComponent must be trivially copyable for serialization");
     static_assert(std::is_trivially_copyable_v<NeedComponent>, "NeedComponent must be trivially copyable for serialization");
     static_assert(std::is_trivially_copyable_v<EmotionComponent>, "EmotionComponent must be trivially copyable for serialization");
     static_assert(std::is_trivially_copyable_v<DecisionComponent>, "DecisionComponent must be trivially copyable for serialization");

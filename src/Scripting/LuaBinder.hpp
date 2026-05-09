@@ -73,6 +73,18 @@ namespace Rinn {
 				strncpy(tb.text, t.c_str(), 255);
 				tb.display_time = data.get<float>("time"); // 移除 get_or，强制要求必须传入 time
 			}
+			else if (name == "Identity") {
+				if (reg.has<Rinn::IdentityComponent>(e)) {
+					reg.remove<Rinn::IdentityComponent>(e);
+				}
+				auto& id = reg.emplace<Rinn::IdentityComponent>(e);
+				std::string name_value = data["name"].get_or(std::string{});
+				std::string display_value = data["display_name"].get_or(name_value);
+				strncpy(id.name, name_value.c_str(), sizeof(id.name) - 1);
+				id.name[sizeof(id.name) - 1] = '\0';
+				strncpy(id.display_name, display_value.c_str(), sizeof(id.display_name) - 1);
+				id.display_name[sizeof(id.display_name) - 1] = '\0';
+			}
 			else if (name == "Need") {
 				// 函数定义
 				auto read_need_array = [](sol::table values) {
@@ -121,6 +133,37 @@ namespace Rinn {
 					reg.remove<Rinn::EmotionComponent>(e);
 				}
 				reg.emplace<Rinn::EmotionComponent>(e, emotion);
+			}
+			else if (name == "Decision") {
+				if (reg.has<Rinn::DecisionComponent>(e)) {
+					reg.remove<Rinn::DecisionComponent>(e);
+				}
+				sol::optional<Entity> target = data["target"];
+				reg.emplace<Rinn::DecisionComponent>(e,
+					target.value_or(Entity{}),
+					static_cast<uint16_t>(data["action_id"].get_or(0)),
+					data["progress"].get_or(1.0f),
+					data["next_tick"].get_or(0u));
+			}
+			else if (name == "StoneTablet") {
+				if (reg.has<Rinn::StoneTabletComponent>(e)) {
+					reg.remove<Rinn::StoneTabletComponent>(e);
+				}
+				sol::optional<Entity> owner = data["owner"];
+				reg.emplace<Rinn::StoneTabletComponent>(e,
+					data["online"].get_or(true),
+					owner.value_or(Entity{}),
+					static_cast<int8_t>(data["broadcast_range"].get_or(100)));
+			}
+			else if (name == "Relation") {
+				if (reg.has<Rinn::RelationComponent>(e)) {
+					reg.remove<Rinn::RelationComponent>(e);
+				}
+				reg.emplace<Rinn::RelationComponent>(e,
+					data.get<Entity>("from"),
+					data.get<Entity>("to"),
+					static_cast<int8_t>(data["affinity"].get_or(0)),
+					static_cast<int8_t>(data["power_diff"].get_or(0)));
 			}
 			});
 

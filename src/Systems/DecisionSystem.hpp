@@ -38,14 +38,42 @@ namespace Rinn::DecisionSystem {
     };
 
     // 默认 catalog (M6 改成 Lua 加载)
+    // 4 类情绪 (chat log 1082-1086) × 3 变种 + 悲伤 3 + idle = 16 actions
+    // modulators 索引: 0 怒 / 1 焦 / 2 恐 / 3 悲 / 4 孤
+    // duration 大幅延长 (5-10s) 避免动作刷屏 + 给台词留呼吸时间
     inline std::vector<ActionDef> action_catalog = {
-        // name              need  gain  modulators (怒/焦/恐/悲/孤)        dur   complete_event
-        { "idle",              5,  0.05f, {0.0f, 0.0f, 0.0f, 0.0f, 0.0f},   1.0f, EventBus::EventType::None },
-        { "talk_to_leader",    1,  0.40f, {1.5f, 0.5f, 0.0f, 0.0f, 0.0f},   4.0f, EventBus::EventType::None },
-        { "break_tablet",      0,  0.30f, {2.5f, 0.0f, 0.0f, 0.0f, 0.0f},   2.5f, EventBus::EventType::BrokeDown },
-        { "hoard_resources",   3,  0.50f, {0.0f, 2.0f, 1.5f, 0.0f, 0.0f},   3.0f, EventBus::EventType::None },
-        { "pray",              4,  0.40f, {0.0f, 0.0f, 0.0f, 0.5f, 0.5f},   3.0f, EventBus::EventType::None },
+        // ─── 默认 ─────────────────────────────────────────
+        { "idle",              5,  0.05f, {0.0f, 0.0f, 0.0f, 0.0f, 0.0f},   3.0f, EventBus::EventType::None },
+
+        // ─── 愤怒型 (3) ───────────────────────────────────
+        { "break_tablet",      0,  0.30f, {3.0f, 0.0f, 0.0f, 0.0f, 0.0f},   8.0f, EventBus::EventType::BrokeDown },
+        { "refuse_tax",        0,  0.40f, {2.5f, 0.5f, 0.0f, 0.0f, 0.0f},   6.0f, EventBus::EventType::TaxRefused },
+        { "confront_leader",   1,  0.40f, {2.0f, 0.5f, 0.0f, 0.0f, 0.0f},   6.0f, EventBus::EventType::ConfrontedLeader },
+
+        // ─── 焦虑型 (3) ───────────────────────────────────
+        { "hoard_resources",   3,  0.50f, {0.0f, 2.0f, 1.5f, 0.0f, 0.0f},   6.0f, EventBus::EventType::Hoarded },
+        { "hide_money",        3,  0.40f, {0.0f, 2.5f, 1.0f, 0.0f, 0.0f},   5.0f, EventBus::EventType::HidMoney },
+        { "prepay_miners",     3,  0.45f, {0.0f, 2.0f, 0.0f, 0.0f, 0.0f},   6.0f, EventBus::EventType::PrepaidMiners },
+
+        // ─── 恐慌型 (3) ───────────────────────────────────
+        { "close_doors",       3,  0.35f, {0.0f, 0.5f, 2.5f, 0.0f, 0.0f},   4.0f, EventBus::EventType::ClosedDoors },
+        { "feign_illness",     3,  0.30f, {0.0f, 0.0f, 2.0f, 0.5f, 0.0f},   8.0f, EventBus::EventType::FeignedIllness },
+        { "flatter",           1,  0.30f, {0.0f, 0.0f, 2.5f, 0.0f, 0.5f},   5.0f, EventBus::EventType::Flattered },
+
+        // ─── 孤独型 (3) ───────────────────────────────────
+        { "visit_friend",      1,  0.40f, {0.0f, 0.0f, 0.0f, 0.5f, 2.0f},   6.0f, EventBus::EventType::VisitedFriend },
+        { "go_tavern",         1,  0.45f, {0.0f, 0.0f, 0.0f, 0.5f, 2.5f},   8.0f, EventBus::EventType::WentToTavern },
+        { "attend_funeral",    1,  0.30f, {0.0f, 0.0f, 0.0f, 1.5f, 2.0f},  10.0f, EventBus::EventType::AttendedFuneral },
+
+        // ─── 悲伤型 (3) ───────────────────────────────────
+        { "confide_grief",     2,  0.35f, {0.0f, 0.0f, 0.0f, 2.0f, 0.5f},   6.0f, EventBus::EventType::ConfidedGrief },
+        { "pray",              4,  0.40f, {0.0f, 0.0f, 0.0f, 0.5f, 0.5f},   8.0f, EventBus::EventType::Prayed },
+        { "sink_into_grief",   2,  0.20f, {0.0f, 0.0f, 0.0f, 2.5f, 1.0f},  10.0f, EventBus::EventType::SankIntoGrief },
     };
+
+    // ─── M6 v2: action 选定钩子 (LineSystem 用此驱动同步台词) ───
+    using ActionChosenHook = void(*)(Entity actor, EventBus::EventType complete_event);
+    inline ActionChosenHook g_on_action_chosen = nullptr;
 
     inline uint32_t global_tick = 0;
     inline uint32_t REDECIDE_INTERVAL_TICKS = 60;  // ~1s @ 60fps
@@ -106,11 +134,18 @@ namespace Rinn::DecisionSystem {
 
             // 切动作 -> 重置 progress.  同动作但已完成 -> 也重置以重新执行
             bool changed = (dec.current_action_id != static_cast<uint16_t>(best_id));
+            bool restarted = (!changed && dec.action_progress >= 1.0f);
             dec.current_action_id = static_cast<uint16_t>(best_id);
-            if (changed || dec.action_progress >= 1.0f) {
+            if (changed || restarted) {
                 dec.action_progress = 0.0f;
             }
             last_chosen[e.id] = best_id;
+
+            // 动作选定时立即触发台词钩子 (LineSystem 监听)
+            // 只在 action 真正切换或重启时触发, 避免每次重决策都说话
+            if ((changed || restarted) && g_on_action_chosen) {
+                g_on_action_chosen(e, action_catalog[best_id].complete_event);
+            }
 
             dec.next_decision_tick = global_tick + REDECIDE_INTERVAL_TICKS;
         }

@@ -4,15 +4,12 @@ local ASSET_DIR = "../../../assets/texture/"
 -- 新增：通过 Lua 脚本加载你用 Tiled 编辑的可视化地图组合
 dofile("../../../scripts/map_loader.lua")
 -- 动态加载瓦片，同时获取里面被美术划定的剧情包围盒坐标！
-local map_ok, map_triggers = load_tiled_map("../../../assets/texture/complex_map.lua")
+local map_ok, map_triggers = load_tiled_map("../../../assets/texture/new_map.lua")
 
 -- 缓存地图尺寸，用于无玩家时摄像机兜底聚焦
-local map_data = dofile("../../../assets/texture/complex_map.lua")
+local map_data = dofile("../../../assets/texture/new_map.lua")
 local map_center_x = (map_data.width * map_data.tilewidth) / 2
 local map_center_y = (map_data.height * map_data.tileheight) / 2
-
--- 引入最新剧情数据
-local dialogue_data = dofile("../../../scripts/dialogue_data.lua")
 
 -- ===============================================================
 -- 播放背景音乐 (只需让引擎启动时播放一次，AudioSystem 会在后台持续刷新流)
@@ -23,20 +20,174 @@ play_bgm("../../../assets/audio/bgm.ogg")
 -- 遍历数据，自动创建所有实体
 local player = nil
 local npcs = {} -- 新增：保存所有可互动 NPC 列表
-local progress = {} -- 记录每个 NPC 说到哪句话了
+local npc_by_name = {}
 
--- 全局 flag set：string -> true，引擎不感知任何具体业务语义
-local flags = {}
+local COLLISION_PLAYER = 0x0001
+local COLLISION_STATIC = 0x0002
 
--- 通用分支选择：返回第一个 when 条件全部满足的 branch
-local function resolve_branch(branches)
-    for _, b in ipairs(branches) do
-        local ok = true
-        for _, f in ipairs(b.when) do
-            if not flags[f] then ok = false; break end
-        end
-        if ok then return b end
+local function png_name(name)
+    if not name then return nil end
+    if name:match("%.png$") then return name end
+    return name .. ".png"
+end
+
+local function normal_name(tex_name)
+    if not tex_name then return nil end
+    return tex_name:gsub("%.png$", "_n.png")
+end
+
+local NPC_PROFILES = {
+    Village_Head = {
+        display = "村长",
+        weights = {3, 2, 3, 5, 2, 1},
+        satisfaction = {5, 4, 4, 3, 4, 2},
+        expectation = {5, 4, 4, 5, 4, 2},
+        tablet_online = true
+    },
+    Blacksmith = {
+        display = "铁匠",
+        weights = {5, 3, 4, 2, 1, 2},
+        satisfaction = {3, 3, 4, 3, 1, 3},
+        expectation = {5, 3, 4, 3, 1, 3},
+        tablet_online = true
+    },
+    Father = {
+        display = "神父",
+        weights = {2, 4, 2, 2, 5, 2},
+        satisfaction = {3, 3, 3, 3, 3, 3},
+        expectation = {3, 3, 3, 3, 5, 3},
+        tablet_online = true
+    },
+    Bartender = {
+        display = "酒保",
+        weights = {3, 5, 2, 2, 1, 2},
+        satisfaction = {3, 4, 3, 3, 2, 3},
+        expectation = {3, 5, 3, 3, 2, 3},
+        tablet_online = true
+    }
+}
+
+local function object_center(obj)
+    local w = obj.w or 32
+    local h = obj.h or 32
+    return obj.x + w / 2, obj.y + h / 2
+end
+
+local function add_interactable(e, obj, tex_name, fallback_type)
+    local cx, cy = object_center(obj)
+    table.insert(npcs, {
+        id = e,
+        name = tex_name or obj.name,
+        type = obj.type ~= "" and obj.type or fallback_type,
+        w = obj.w,
+        h = obj.h,
+        cx = cx,
+        cy = cy
+    })
+end
+
+local function attach_identity(e, name, display_name)
+    set(e, "Identity", {
+        name = name,
+        display_name = display_name or name
+    })
+end
+
+local function attach_ai(e, obj)
+    local profile = NPC_PROFILES[obj.name]
+    if not profile then return end
+
+    attach_identity(e, obj.name, profile.display)
+    set(e, "Need", {
+        weights = profile.weights,
+        satisfaction = profile.satisfaction,
+        expectation = profile.expectation
+    })
+    set(e, "Emotion", {
+        intensity = {0, 0, 0, 0, 0},
+        target = {nil, nil, nil, nil, nil},
+        decay_rate = {0.10, 0.10, 0.20, 0.05, 0.05}
+    })
+    set(e, "StoneTablet", {
+        online = profile.tablet_online,
+        owner = e,
+        broadcast_range = 100
+    })
+    set(e, "Decision", {
+        target = nil,
+        action_id = 0,
+        progress = 1.0,
+        next_tick = 0
+    })
+    npc_by_name[obj.name] = e
+end
+
+local function create_relation(from_name, to_name, affinity, power_diff)
+    local from = npc_by_name[from_name]
+    local to = npc_by_name[to_name]
+    if not from or not to then return end
+    local edge = create_entity()
+    set(edge, "Relation", {
+        from = from,
+        to = to,
+        affinity = affinity,
+        power_diff = power_diff
+    })
+end
+
+local function create_player(obj)
+    local e = create_entity()
+    local tex = load_texture(ASSET_DIR .. "Player.png")
+    local nor = load_texture(ASSET_DIR .. "Player_n.png")
+    local w = obj.w or 64
+    local h = obj.h or 64
+
+    set(e, "Transform", { x = obj.x, y = obj.y, layer = 2 })
+    set(e, "Sprite", { texture_id = tex, normal_id = nor, width = w, height = h, src_x = 0, src_y = 0, src_w = 0, src_h = 0 })
+    set(e, "Collider", {
+        width = w * 0.45,
+        height = h * 0.25,
+        offset_x = w * 0.275,
+        offset_y = h * 0.70,
+        layer = COLLISION_PLAYER,
+        mask = COLLISION_STATIC
+    })
+    set(e, "Velocity", { x = 0, y = 0 })
+    attach_identity(e, "Player", "主角")
+    set(e, "Need", {
+        weights = { 4, 3, 5, 2, 1, 2 },
+        satisfaction = { 4, 3, 0, 2, 1, 2 },
+        expectation = { 2, 1, 0, 1, 1, 2 }
+    })
+    return e
+end
+
+local function create_static_sprite(obj, fallback_type)
+    local tex_name = png_name(obj.texture or obj.name)
+    local tex = load_texture(ASSET_DIR .. tex_name)
+    local nor_name = normal_name(tex_name)
+    local nor = nor_name and load_texture(ASSET_DIR .. nor_name) or 0
+    local w = obj.w or 128
+    local h = obj.h or 128
+    local e = create_entity()
+
+    set(e, "Transform", { x = obj.x, y = obj.y, layer = 2 })
+    set(e, "Sprite", { texture_id = tex, normal_id = nor, width = w, height = h, src_x = 0, src_y = 0, src_w = 0, src_h = 0 })
+    attach_identity(e, obj.name, obj.name)
+    -- 只有 Collider，没有 Velocity：物理/碰撞系统会把它当静态实体。
+    set(e, "Collider", {
+        width = w * 0.55,
+        height = h * 0.28,
+        offset_x = w * 0.225,
+        offset_y = h * 0.68,
+        layer = COLLISION_STATIC,
+        mask = COLLISION_PLAYER
+    })
+    add_interactable(e, obj, tex_name, fallback_type)
+    if fallback_type == "Npc" then
+        attach_ai(e, obj)
     end
+    return e
 end
 
 -- ===============================================================
@@ -47,41 +198,16 @@ if map_triggers then
         
         if obj.type == "Player" then
             -- 装配主角实体
-            player = create_entity()
-            local tex = load_texture(ASSET_DIR .. "Player.png")
-            set(player, "Transform", { x = obj.x, y = obj.y, layer = 2 })
-            set(player, "Sprite", { texture_id = tex, width = obj.w, height = obj.h, src_x = 0, src_y = 0, src_w = 0, src_h = 0 })
-            set(player, "Collider", { width = obj.w, height = obj.h })
-            set(player, "Velocity", { x = 0, y = 0 })
-            set(player, "Need", {
-                weights = { 4, 3, 5, 2, 1, 2 },
-                satisfaction = { 4, 3, 0, 2, 1, 2 },
-                expectation = { 2, 1, 0, 1, 1, 2 }
-            })
+            player = create_player(obj)
             
         elseif obj.type == "Npc" then
             -- 装配可见的 NPC 实体
-            local e = create_entity()
+            create_static_sprite(obj, "Npc")
             
-            -- Tiled 里面填入的名字 (比如 Guard_Albedo) 加上后缀自动映射
-            local tex_name = obj.name
-            if not tex_name:match("%.png$") then tex_name = tex_name .. ".png" end
-            local tex = load_texture(ASSET_DIR .. tex_name)
-            
-            set(e, "Transform", { x = obj.x, y = obj.y, layer = 2 })
-            set(e, "Sprite", { texture_id = tex, width = obj.w, height = obj.h, src_x = 0, src_y = 0, src_w = 0, src_h = 0 })
-            -- [做减法]：不再给它挂载 Velocity 组件，这样它在物理系统里就像一座山一样，主角绝对推不动！
-            set(e, "Collider", { width = obj.w, height = obj.h })
-            
-            table.insert(npcs, { 
-                id = e, 
-                name = tex_name, 
-                w = obj.w,
-                h = obj.h,
-                cx = obj.x + (obj.w or 32) / 2,
-                cy = obj.y + (obj.h or 32) / 2
-            })
-            
+        elseif obj.gid and obj.gid > 0 then
+            -- new_map 里石碑 type 为空，但有 gid/texture；它应该是可见、可碰撞、不可推动的静态物。
+            create_static_sprite(obj, "Static")
+
         else
             -- 装配隐形逻辑触发器 (Well, Bush, Chest)
             local trigger_e = create_entity()
@@ -90,32 +216,24 @@ if map_triggers then
             set(trigger_e, "Collider", { width = obj.w or 48, height = (obj.h or 48) / 2 })
             
             -- npc表新增 type 保存，作为查字典不到时的 fallback
-            table.insert(npcs, { 
-                id = trigger_e, 
-                name = obj.name, 
-                type = obj.type,
-                w = obj.w,
-                h = obj.h,
-                cx = obj.x + (obj.w or 32) / 2,
-                cy = obj.y + (obj.h or 32) / 2
-            })
+            add_interactable(trigger_e, obj, obj.name, obj.type)
         end
     end
 end
 
+create_relation("Blacksmith", "Village_Head", -40, -50)
+create_relation("Village_Head", "Blacksmith", 0, 50)
+create_relation("Blacksmith", "Father", 30, 0)
+create_relation("Father", "Village_Head", 20, -10)
+create_relation("Father", "Blacksmith", 30, 0)
+create_relation("Village_Head", "Father", 10, 10)
+create_relation("Bartender", "Blacksmith", 25, 0)
+create_relation("Blacksmith", "Bartender", 25, 0)
+create_relation("Bartender", "Village_Head", 10, -20)
+
 -- [临时测试] Tiled 对象层为空时，手动创建 Player
 if not player then
-    player = create_entity()
-    local tex = load_texture(ASSET_DIR .. "Player.png")
-    local nor = load_texture(ASSET_DIR .. "Player_n.png")
-    set(player, "Transform", { x = map_center_x, y = map_center_y, layer = 2 })
-    set(player, "Sprite", { texture_id = tex, normal_id = nor, width = 256, height = 256, src_x = 0, src_y = 0, src_w = 0, src_h = 0 })
-    set(player, "Velocity", { x = 0, y = 0 })
-    set(player, "Need", {
-        weights = { 4, 3, 5, 2, 1, 2 },
-        satisfaction = { 4, 3, 0, 2, 1, 2 },
-        expectation = { 2, 1, 0, 1, 1, 2 }
-    })
+    player = create_player({ x = map_center_x, y = map_center_y, w = 128, h = 128 })
     set(player, "Emotion",{
         intensity = { 4, 3, 2, 3, 2 },
         target = { nil, nil, nil, nil, nil },
@@ -147,78 +265,4 @@ function on_update()
     -- HD-2D 新增：物理逻辑跑完之后，通知 C++ 的 3D 摄像机聚焦到此
     local px, py = get_pos(player)
     set_camera_target(px, py)
-    
-    -- ===================
-    -- 纯 Lua 的距离驱动的极简叙事系统
-    -- ===================
-    local space_is_down = is_key_down(32) -- 32 是空格键
-    local space_pressed = space_is_down and not last_space_down
-    last_space_down = space_is_down
-
-    if space_pressed then
-        local closest_dist = 100 * 100
-        local target_npc = nil
-        local target_valid_key = nil
-        
-        -- 核心逻辑进阶：先遍历一圈，找出离主角绝对距离【最近】的那个合法互动物体
-        for _, npc in ipairs(npcs) do
-            local nx_center = npc.cx
-            local ny_center = npc.cy
-            local px_center = px + 16
-            local py_center = py + 16
-
-            local dist2 = (nx_center - px_center) * (nx_center - px_center) + (ny_center - py_center) * (ny_center - py_center)
-            
-            if dist2 < closest_dist then
-                
-                local valid_key = nil
-                local function find_key(key)
-                    if not key then return nil end
-                    local lk = key:lower()
-                    for k, v in pairs(dialogue_data) do
-                        local clk = k:lower()
-                        if clk == lk or clk == lk .. ".png" then return k end
-                    end
-                    return nil
-                end
-
-                valid_key = find_key(npc.name)
-                if not valid_key then valid_key = find_key(npc.type) end
-                
-                if valid_key then
-                    -- 记录当前最近的候选人，收紧筛选半径
-                    closest_dist = dist2
-                    target_npc = npc
-                    target_valid_key = valid_key
-                end
-            end
-        end
-
-        -- 锁定最近目标后，用通用引擎推演，不认识任何具体物件
-        if target_valid_key and target_npc then
-            local key = target_valid_key
-            local npc = target_npc
-
-            local branch = resolve_branch(dialogue_data[key])
-            if branch then
-                local bid = branch.id
-                progress[key] = progress[key] or {}
-                progress[key][bid] = progress[key][bid] or 1
-                local cur_idx = progress[key][bid]
-
-                if cur_idx <= #branch.lines then
-                    set(npc.id, "TextBubble", { text = branch.lines[cur_idx], time = 3.0 })
-                    -- 副作用：由数据声明，引擎统一触发
-                    if branch.on_line and cur_idx == branch.on_line then
-                        if branch.gives  then flags[branch.gives] = true end
-                        if branch.effect then branch.effect(npc) end
-                    end
-                    progress[key][bid] = cur_idx + 1
-                else
-                    remove(npc.id, "TextBubble")
-                    progress[key][bid] = 1
-                end
-            end
-        end
-    end
 end

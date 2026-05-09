@@ -81,8 +81,10 @@ add_executable(${PROJECT_NAME}
     src/Systems/DecisionSystem.hpp
     src/Systems/ActionExecutionSystem.hpp
     src/Systems/EventSystem.hpp
+    src/Systems/LineSystem.hpp
     src/UI/ComponentUI.hpp
     src/UI/LightUI.hpp
+    src/UI/AIDebugUI.hpp
 
     # Dear ImGui 核心源文件
     ${imgui_SOURCE_DIR}/imgui.cpp
