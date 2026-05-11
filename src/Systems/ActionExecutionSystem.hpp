@@ -19,6 +19,20 @@
 
 namespace Rinn::ActionExecutionSystem {
 
+    // 把 ActionDef.target_kind 解析成具体 entity (agency-aware 处理依赖 e.target 字段)
+    inline Entity resolve_target(Registry& reg, DecisionSystem::TargetKind kind, Entity actor) {
+        using TK = DecisionSystem::TargetKind;
+        switch (kind) {
+            case TK::NoTarget: return Entity{};
+            case TK::Self:     return actor;
+            case TK::Leader: {
+                for (Entity e : reg.view<IsLeader>()) return e;
+                return Entity{};
+            }
+        }
+        return Entity{};
+    }
+
     inline void Update(Registry& reg, float dt) {
         for (Entity e : reg.view<NeedComponent, DecisionComponent>()) {
             auto& dec = reg.get<DecisionComponent>(e);
@@ -48,8 +62,9 @@ namespace Rinn::ActionExecutionSystem {
 
                 // 3. publish 完成事件 (产生下一跳, 仅当 catalog 里指定了 complete_event)
                 if (act.complete_event != EventBus::EventType::None) {
+                    Entity target = resolve_target(reg, act.target_kind, e);
                     EventBus::Publish(EventBus::Event{
-                        act.complete_event, e, Entity{}, 0.0f, 0
+                        act.complete_event, e, target, 0.0f, 0
                     });
                 }
 

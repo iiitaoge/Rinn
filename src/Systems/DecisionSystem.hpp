@@ -28,6 +28,13 @@ namespace Rinn::DecisionSystem {
     //   gain         : 完成时给 satisfaction 的基础增量
     //   modulators[5]: 情绪调制 (0 怒 1 焦 2 恐 3 悲 4 孤)
     //   duration     : 执行秒数
+    //   target_kind  : action 完成事件的 target 解析方式 (agency-aware 处理依赖)
+    enum class TargetKind : uint8_t {
+        NoTarget,   // 不指涉具体对象 (idle, hoard, pray ...)
+        Leader,     // 指向当前 IsLeader-tagged 实体 (refuse_tax, confront_leader, flatter)
+        Self,       // 指向 actor 自己
+    };
+
     struct ActionDef {
         const char* name;
         int   gain_need_idx;
@@ -35,6 +42,7 @@ namespace Rinn::DecisionSystem {
         std::array<float, EmotionComponent::E> modulators;
         float duration;
         EventBus::EventType complete_event;  // None 表示无副作用
+        TargetKind target_kind;
     };
 
     // 默认 catalog (M6 改成 Lua 加载)
@@ -43,32 +51,32 @@ namespace Rinn::DecisionSystem {
     // duration 大幅延长 (5-10s) 避免动作刷屏 + 给台词留呼吸时间
     inline std::vector<ActionDef> action_catalog = {
         // ─── 默认 ─────────────────────────────────────────
-        { "idle",              5,  0.05f, {0.0f, 0.0f, 0.0f, 0.0f, 0.0f},   3.0f, EventBus::EventType::None },
+        { "idle",              5,  0.05f, {0.0f, 0.0f, 0.0f, 0.0f, 0.0f},   3.0f, EventBus::EventType::None,             TargetKind::NoTarget },
 
         // ─── 愤怒型 (3) ───────────────────────────────────
-        { "break_tablet",      0,  0.30f, {3.0f, 0.0f, 0.0f, 0.0f, 0.0f},   8.0f, EventBus::EventType::BrokeDown },
-        { "refuse_tax",        0,  0.40f, {2.5f, 0.5f, 0.0f, 0.0f, 0.0f},   6.0f, EventBus::EventType::TaxRefused },
-        { "confront_leader",   1,  0.40f, {2.0f, 0.5f, 0.0f, 0.0f, 0.0f},   6.0f, EventBus::EventType::ConfrontedLeader },
+        { "break_tablet",      0,  0.30f, {3.0f, 0.0f, 0.0f, 0.0f, 0.0f},   8.0f, EventBus::EventType::BrokeDown,        TargetKind::NoTarget },
+        { "refuse_tax",        0,  0.40f, {2.5f, 0.5f, 0.0f, 0.0f, 0.0f},   6.0f, EventBus::EventType::TaxRefused,       TargetKind::Leader   },
+        { "confront_leader",   1,  0.40f, {2.0f, 0.5f, 0.0f, 0.0f, 0.0f},   6.0f, EventBus::EventType::ConfrontedLeader, TargetKind::Leader   },
 
         // ─── 焦虑型 (3) ───────────────────────────────────
-        { "hoard_resources",   3,  0.50f, {0.0f, 2.0f, 1.5f, 0.0f, 0.0f},   6.0f, EventBus::EventType::Hoarded },
-        { "hide_money",        3,  0.40f, {0.0f, 2.5f, 1.0f, 0.0f, 0.0f},   5.0f, EventBus::EventType::HidMoney },
-        { "prepay_miners",     3,  0.45f, {0.0f, 2.0f, 0.0f, 0.0f, 0.0f},   6.0f, EventBus::EventType::PrepaidMiners },
+        { "hoard_resources",   3,  0.50f, {0.0f, 2.0f, 1.5f, 0.0f, 0.0f},   6.0f, EventBus::EventType::Hoarded,          TargetKind::NoTarget },
+        { "hide_money",        3,  0.40f, {0.0f, 2.5f, 1.0f, 0.0f, 0.0f},   5.0f, EventBus::EventType::HidMoney,         TargetKind::NoTarget },
+        { "prepay_miners",     3,  0.45f, {0.0f, 2.0f, 0.0f, 0.0f, 0.0f},   6.0f, EventBus::EventType::PrepaidMiners,    TargetKind::NoTarget },
 
         // ─── 恐慌型 (3) ───────────────────────────────────
-        { "close_doors",       3,  0.35f, {0.0f, 0.5f, 2.5f, 0.0f, 0.0f},   4.0f, EventBus::EventType::ClosedDoors },
-        { "feign_illness",     3,  0.30f, {0.0f, 0.0f, 2.0f, 0.5f, 0.0f},   8.0f, EventBus::EventType::FeignedIllness },
-        { "flatter",           1,  0.30f, {0.0f, 0.0f, 2.5f, 0.0f, 0.5f},   5.0f, EventBus::EventType::Flattered },
+        { "close_doors",       3,  0.35f, {0.0f, 0.5f, 2.5f, 0.0f, 0.0f},   4.0f, EventBus::EventType::ClosedDoors,      TargetKind::NoTarget },
+        { "feign_illness",     3,  0.30f, {0.0f, 0.0f, 2.0f, 0.5f, 0.0f},   8.0f, EventBus::EventType::FeignedIllness,   TargetKind::NoTarget },
+        { "flatter",           1,  0.30f, {0.0f, 0.0f, 2.5f, 0.0f, 0.5f},   5.0f, EventBus::EventType::Flattered,        TargetKind::Leader   },
 
         // ─── 孤独型 (3) ───────────────────────────────────
-        { "visit_friend",      1,  0.40f, {0.0f, 0.0f, 0.0f, 0.5f, 2.0f},   6.0f, EventBus::EventType::VisitedFriend },
-        { "go_tavern",         1,  0.45f, {0.0f, 0.0f, 0.0f, 0.5f, 2.5f},   8.0f, EventBus::EventType::WentToTavern },
-        { "attend_funeral",    1,  0.30f, {0.0f, 0.0f, 0.0f, 1.5f, 2.0f},  10.0f, EventBus::EventType::AttendedFuneral },
+        { "visit_friend",      1,  0.40f, {0.0f, 0.0f, 0.0f, 0.5f, 2.0f},   6.0f, EventBus::EventType::VisitedFriend,    TargetKind::NoTarget },
+        { "go_tavern",         1,  0.45f, {0.0f, 0.0f, 0.0f, 0.5f, 2.5f},   8.0f, EventBus::EventType::WentToTavern,     TargetKind::NoTarget },
+        { "attend_funeral",    1,  0.30f, {0.0f, 0.0f, 0.0f, 1.5f, 2.0f},  10.0f, EventBus::EventType::AttendedFuneral,  TargetKind::NoTarget },
 
         // ─── 悲伤型 (3) ───────────────────────────────────
-        { "confide_grief",     2,  0.35f, {0.0f, 0.0f, 0.0f, 2.0f, 0.5f},   6.0f, EventBus::EventType::ConfidedGrief },
-        { "pray",              4,  0.40f, {0.0f, 0.0f, 0.0f, 0.5f, 0.5f},   8.0f, EventBus::EventType::Prayed },
-        { "sink_into_grief",   2,  0.20f, {0.0f, 0.0f, 0.0f, 2.5f, 1.0f},  10.0f, EventBus::EventType::SankIntoGrief },
+        { "confide_grief",     2,  0.35f, {0.0f, 0.0f, 0.0f, 2.0f, 0.5f},   6.0f, EventBus::EventType::ConfidedGrief,    TargetKind::NoTarget },
+        { "pray",              4,  0.40f, {0.0f, 0.0f, 0.0f, 0.5f, 0.5f},   8.0f, EventBus::EventType::Prayed,           TargetKind::NoTarget },
+        { "sink_into_grief",   2,  0.20f, {0.0f, 0.0f, 0.0f, 2.5f, 1.0f},  10.0f, EventBus::EventType::SankIntoGrief,    TargetKind::NoTarget },
     };
 
     // ─── M6 v2: action 选定钩子 (LineSystem 用此驱动同步台词) ───
@@ -84,7 +92,9 @@ namespace Rinn::DecisionSystem {
 
     inline float compute_utility(const NeedComponent& need,
                                  const EmotionComponent& emo,
-                                 const ActionDef& a) {
+                                 const ActionDef& a,
+                                 const ActionBiasComponent* bias_opt,
+                                 size_t action_id) {
         int ni = a.gain_need_idx;
         if (ni < 0 || ni >= NeedComponent::N) return 0.0f;
 
@@ -96,7 +106,13 @@ namespace Rinn::DecisionSystem {
             modulator += emo.intensity[i] * a.modulators[i];
         }
 
-        return a.gain * salience * modulator;
+        float base = a.gain * salience * modulator;
+
+        // L1: 持久 utility 偏置 (剧本/设计师注入, 算积分一部分)
+        if (bias_opt && action_id < ActionBiasComponent::MAX_ACTIONS) {
+            base += bias_opt->bias[action_id];
+        }
+        return base;
     }
 
     // 强制 NPC 立即重决策 (AppraisalSystem 中断时调)
@@ -116,6 +132,10 @@ namespace Rinn::DecisionSystem {
 
             auto& need = reg.get<NeedComponent>(e);
             auto& emo  = reg.get<EmotionComponent>(e);
+            const ActionBiasComponent* bias_ptr = nullptr;
+            if (auto opt = reg.try_get<ActionBiasComponent>(e); opt.has_value()) {
+                bias_ptr = &opt->get();
+            }
 
             float best_u   = -1.0f;
             int   best_id  = 0;
@@ -124,7 +144,7 @@ namespace Rinn::DecisionSystem {
             scores.assign(action_catalog.size(), 0.0f);
 
             for (size_t i = 0; i < action_catalog.size(); ++i) {
-                float u = compute_utility(need, emo, action_catalog[i]);
+                float u = compute_utility(need, emo, action_catalog[i], bias_ptr, i);
                 scores[i] = u;
                 if (u > best_u) {
                     best_u  = u;

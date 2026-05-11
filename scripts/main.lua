@@ -119,6 +119,10 @@ local function attach_ai(e, obj)
         progress = 1.0,
         next_tick = 0
     })
+    -- 标记村长为权威者 (IsLeader tag), agency-aware 处理用此解析 target_kind=Leader
+    if obj.name == "Village_Head" then
+        set(e, "Tag_Leader", {})
+    end
     npc_by_name[obj.name] = e
 end
 
@@ -230,6 +234,25 @@ create_relation("Village_Head", "Father", 10, 10)
 create_relation("Bartender", "Blacksmith", 25, 0)
 create_relation("Blacksmith", "Bartender", 25, 0)
 create_relation("Bartender", "Village_Head", 10, -20)
+
+-- ─── L1 utility 偏置: 把"脆弱者动作"对村长的吸引力压死 ───────────────
+-- 这不是 if-豁免 (那是结构破坏), 而是通过 constrained agency 框架注入的低熵:
+-- DecisionSystem.compute_utility 走同一公式, 只是村长在这些 action 上有持久负偏置.
+-- 村长落不到 hoard / hide_money / close_doors / feign_illness, 自然不会说"得多藏点粮食…".
+-- action_id 见 DecisionSystem::action_catalog (0=idle, 2=refuse_tax, 3=confront_leader,
+-- 4=hoard, 5=hide_money, 7=close_doors, 8=feign_illness). Lua 索引 = action_id + 1.
+local vh = npc_by_name["Village_Head"]
+if vh then
+    local bias = {}
+    for i = 1, 32 do bias[i] = 0 end
+    bias[3]  = -100   -- refuse_tax (村长不会拒自己加的税)
+    bias[4]  = -100   -- confront_leader (村长就是 leader)
+    bias[5]  = -50    -- hoard_resources
+    bias[6]  = -50    -- hide_money
+    bias[8]  = -50    -- close_doors
+    bias[9]  = -50    -- feign_illness
+    set(vh, "ActionBias", { bias = bias })
+end
 
 -- [临时测试] Tiled 对象层为空时，手动创建 Player
 if not player then

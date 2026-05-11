@@ -108,11 +108,17 @@ namespace Rinn::AppraisalSystem {
     }
 
     // ─── F4: 通用工具 - 旁观者反应 ─────────────────────────
+    // C 方案: agency-aware appraisal — 一份事件对 actor / target / witness 走不同路径.
+    //   actor (e.actor)    : 在 apply_witness_reaction 里被显式 skip (已有逻辑)
+    //   target (e.target)  : 用 target_multiplier 替代 base_delta, 表示"被针对者"的反应模式
+    //   witness (其他)     : 走原来的 base_delta * lens / affinity 路径
+    // 当 target_multiplier = 1.0 时退化为旧行为, 兼容现有 reaction 表.
     struct WitnessReaction {
         int   emotion_idx;      // 0 怒 / 1 焦 / 2 恐 / 3 悲 / 4 孤
         float base_delta;
         bool  scale_by_affinity; // 是否按 affinity 缩放 (敌对放大)
         bool  apply_subjective_lens; // 是否过 weight 主观解读
+        float target_multiplier = 1.0f; // 当 npc == e.target 时, base_delta 乘这个 (0=完全免疫, >1=被针对加剧)
     };
 
     inline void bump_emotion(EmotionComponent& emo, int idx, float delta) {
@@ -127,6 +133,7 @@ namespace Rinn::AppraisalSystem {
     }
 
     // 通用 witness 反应函数 - 所有 action 完成事件复用
+    // agency-aware: actor 跳过, target 走 target_multiplier, 其余 NPC 走原 lens/affinity 路径.
     inline void apply_witness_reaction(const EventBus::Event& e,
                                        std::initializer_list<WitnessReaction> reactions) {
         if (!g_reg) return;
@@ -142,15 +149,24 @@ namespace Rinn::AppraisalSystem {
             auto& need = g_reg->get<NeedComponent>(npc);
             auto& emo  = g_reg->get<EmotionComponent>(npc);
 
+            bool is_target = !e.target.is_null() && npc.id == e.target.id;
+
             float max_abs_delta = 0.0f;
             for (auto& r : reactions) {
-                float delta = r.base_delta;
-                if (r.scale_by_affinity) {
-                    int aff = affinity_from_to(npc, e.actor);
-                    delta *= (1.0f - aff / 200.0f);
-                }
-                if (r.apply_subjective_lens) {
-                    delta *= interpretation_factor(need, primary);
+                float delta;
+                if (is_target) {
+                    // target perspective: 用 target_multiplier 替代 base_delta,
+                    // 不再叠加 affinity / lens (target 反应是"被针对"的特定模式, 不走通用主观解读)
+                    delta = r.base_delta * r.target_multiplier;
+                } else {
+                    delta = r.base_delta;
+                    if (r.scale_by_affinity) {
+                        int aff = affinity_from_to(npc, e.actor);
+                        delta *= (1.0f - aff / 200.0f);
+                    }
+                    if (r.apply_subjective_lens) {
+                        delta *= interpretation_factor(need, primary);
+                    }
                 }
                 max_abs_delta = std::max(max_abs_delta, std::abs(delta));
                 bump_emotion(emo, r.emotion_idx, delta);
@@ -165,6 +181,9 @@ namespace Rinn::AppraisalSystem {
     }
 
     // ─── F1+M4: 信息事件 handler (Tax/Priest/HeardLast) ─────
+    // C 方案核心: actor (e.actor==npc) 走 mirror perspective(-1),
+    // 表示"我自己的决定不会反过来击穿我"——expectation 不下降, anger/anxiety 不上调.
+    // 例: 村长加税, 自己 expectation +=, anger -=, anxiety -=.
     // 返回 max abs emotion delta (用于决定是否触发 witness 台词)
     inline float apply_appraisal_effects(Entity npc, const EventBus::Event& e) {
         using EventType = EventBus::EventType;
@@ -172,8 +191,11 @@ namespace Rinn::AppraisalSystem {
         if (!need_opt.has_value()) return 0.0f;
         auto& need = need_opt->get();
 
+        const float perspective =
+            (!e.actor.is_null() && npc.id == e.actor.id) ? -1.0f : 1.0f;
+
         if (e.type == EventType::TaxIncreased) {
-            need.expectation[0] -= 0.5f * std::max(0.1f, e.payload_f);
+            need.expectation[0] -= 0.5f * std::max(0.1f, e.payload_f) * perspective;
         }
 
         int primary = primary_need_for_event(e.type);
@@ -183,8 +205,9 @@ namespace Rinn::AppraisalSystem {
         if (auto emo_opt = g_reg->try_get<EmotionComponent>(npc); emo_opt.has_value()) {
             auto& emo = emo_opt->get();
             auto bump_track = [&](int idx, float delta) {
-                max_abs = std::max(max_abs, std::abs(delta));
-                bump_emotion(emo, idx, delta);
+                float d = delta * perspective;
+                max_abs = std::max(max_abs, std::abs(d));
+                bump_emotion(emo, idx, d);
             };
             switch (e.type) {
                 case EventType::TaxIncreased:
@@ -253,11 +276,11 @@ namespace Rinn::AppraisalSystem {
     }
 
     inline void handle_tax_refused(const EventBus::Event& e) {
+        // target = leader (被拒税者). 村长不会因为被拒税而 panic, 而是怒上加怒.
         apply_witness_reaction(e, {
-            {2 /*panic*/,  0.30f, true,  false},
-            {0 /*anger*/,  0.15f, false, true},
+            {2 /*panic*/,  0.30f, true,  false, /*target_mult*/ 0.0f},
+            {0 /*anger*/,  0.15f, false, true,  /*target_mult*/ 3.0f},
         });
-        // 拒税让旁观对 leader (代理为 actor 之外的 high-power NPC) 信任下降, M6 简化只 -3 对 actor
         for (Entity npc : g_reg->view<NeedComponent, StoneTabletComponent>()) {
             if (npc.id == e.actor.id) continue;
             update_affinity(npc, e.actor, -3);
@@ -265,8 +288,9 @@ namespace Rinn::AppraisalSystem {
     }
 
     inline void handle_confronted_leader(const EventBus::Event& e) {
+        // target = leader (被对抗者). 比普通 witness 焦虑加剧.
         apply_witness_reaction(e, {
-            {1 /*anxiety*/, 0.20f, false, true},  // 旁观挑战权威 -> 焦虑
+            {1 /*anxiety*/, 0.20f, false, true, /*target_mult*/ 2.5f},
         });
     }
 
@@ -304,10 +328,9 @@ namespace Rinn::AppraisalSystem {
     }
 
     inline void handle_flattered(const EventBus::Event& e) {
-        // target 收到讨好 -> aff[target→actor] +5 (简化: 用 actor 自己的最高 affinity 对象近似)
-        // M6 简化: 全社区轻微 anxiety- (松了一口气), affinity 不动
+        // target = leader (被讨好者). 享受讨好 → anxiety 大降.
         apply_witness_reaction(e, {
-            {1 /*anxiety*/, -0.05f, false, false},
+            {1 /*anxiety*/, -0.05f, false, false, /*target_mult*/ 3.0f},
         });
     }
 

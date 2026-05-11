@@ -102,6 +102,14 @@ namespace Rinn{
         std::bitset<MAX_ENTITIES> knowers;   // ← 信息差的核心
     };
 
+    // L1 注入: 剧本/设计师对每个 action 的持久 utility 偏置 (积分而非用完即焚)
+    // 由 LuaBinder 暴露 inject_action_bias 写入; DecisionSystem.compute_utility 读取相加.
+    // 当前 action_catalog 16 项, 32 留 headroom.
+    struct ActionBiasComponent {
+        static constexpr int MAX_ACTIONS = 32;
+        std::array<float, MAX_ACTIONS> bias;
+    };
+
 
     // ====================================================================
     // 标签组件 (Tag Components) - 零开销标记
@@ -112,6 +120,10 @@ namespace Rinn{
     struct IsEnemy {};
     struct IsDead {};
     struct IsStatic {};
+    // 标记当前权威者 (村长). ActionExecutionSystem 在 publish 事件时
+    // 用它把 target_kind=Leader 解析成具体 entity, AppraisalSystem 在
+    // target-perspective 处理时识别"权威被挑战"的反应模式.
+    struct IsLeader {};
 
     // ====================================================================
     // 编译期组件合法性校验
@@ -133,6 +145,7 @@ namespace Rinn{
     static_assert(std::is_aggregate_v<StoneTabletComponent>, "StoneTabletComponent must be aggregate");
     static_assert(std::is_aggregate_v<RelationComponent>, "RelationComponent must be aggregate");
     static_assert(std::is_aggregate_v<KnowledgeFactComponent>, "KnowledgeFactComponent must be aggregate");
+    static_assert(std::is_aggregate_v<ActionBiasComponent>, "ActionBiasComponent must be aggregate");
 
     // 可序列化：trivially copyable + standard layout → memcpy 安全
     static_assert(std::is_trivially_copyable_v<Transform>, "Transform must be trivially copyable for serialization");
@@ -148,11 +161,13 @@ namespace Rinn{
     static_assert(std::is_trivially_copyable_v<StoneTabletComponent>, "StoneTabletComponent must be trivially copyable for serialization");
     static_assert(std::is_trivially_copyable_v<RelationComponent>, "RelationComponent must be trivially copyable for serialization");
     static_assert(std::is_trivially_copyable_v<KnowledgeFactComponent>, "KnowledgeFactComponent must be trivially copyable for serialization");
+    static_assert(std::is_trivially_copyable_v<ActionBiasComponent>, "ActionBiasComponent must be trivially copyable for serialization");
 
     // 标签组件：空类型
     static_assert(std::is_empty_v<IsPlayer>, "IsPlayer must be empty (tag component)");
     static_assert(std::is_empty_v<IsEnemy>,  "IsEnemy must be empty (tag component)");
     static_assert(std::is_empty_v<IsDead>,   "IsDead must be empty (tag component)");
     static_assert(std::is_empty_v<IsStatic>, "IsStatic must be empty (tag component)");
+    static_assert(std::is_empty_v<IsLeader>, "IsLeader must be empty (tag component)");
 }
 

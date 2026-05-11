@@ -1,6 +1,8 @@
 #pragma once
 #include <sol/sol.hpp>
 #include <cstring>
+#include <string>
+#include <algorithm>
 #include "../Core/Registry.hpp"
 #include "../Components/Components.hpp"
 #include "../Resources/ResourceManager.hpp"
@@ -8,6 +10,7 @@
 #include "../Systems/CollisionSystem.hpp"
 #include "../Systems/RenderSystem.hpp"
 #include "../Systems/AudioSystem.hpp"
+#include "../Systems/EventSystem.hpp"
 
 namespace Rinn {
 	inline void bind(sol::state& lua, Registry& reg, ResourceManager& res) {
@@ -165,6 +168,23 @@ namespace Rinn {
 					static_cast<int8_t>(data["affinity"].get_or(0)),
 					static_cast<int8_t>(data["power_diff"].get_or(0)));
 			}
+			else if (name == "ActionBias") {
+				if (reg.has<Rinn::ActionBiasComponent>(e)) {
+					reg.remove<Rinn::ActionBiasComponent>(e);
+				}
+				ActionBiasComponent ab{};
+				// 接受可选的 table { [action_id]=bias, ... } (1-indexed Lua → 0-indexed C++)
+				sol::optional<sol::table> values = data["bias"];
+				if (values.has_value()) {
+					for (int i = 0; i < ActionBiasComponent::MAX_ACTIONS; ++i) {
+						ab.bias[i] = (*values)[i + 1].get_or(0.0f);
+					}
+				}
+				reg.emplace<Rinn::ActionBiasComponent>(e, ab);
+			}
+			else if (name == "Tag_Leader") {
+				if (!reg.has<Rinn::IsLeader>(e)) reg.emplace<Rinn::IsLeader>(e);
+			}
 			});
 
 		// 绑定移除组件
@@ -215,5 +235,66 @@ namespace Rinn {
 
 		// 3D 摄像机焦点跟随
 		lua.set_function("set_camera_target", RenderSystem::UpdateCamera);
+
+		// ─── 剧本 → 事件管道 (constrained agency: 剧本提议, 角色决定) ───
+		// 剧本可以 publish 任意事件, 但 actor / target 必须显式给出, 不能 nil.
+		// 事件随后通过 AppraisalSystem 走 agency-aware 处理 (actor mirror / target perspective).
+		lua.set_function("publish_event", [](const std::string& type_name,
+			Entity actor, Entity target, float payload_f, int payload_i) {
+			using ET = EventBus::EventType;
+			ET t = ET::None;
+			if      (type_name == "TaxIncreased")     t = ET::TaxIncreased;
+			else if (type_name == "PriestDied")       t = ET::PriestDied;
+			else if (type_name == "HeardLastWords")   t = ET::HeardLastWords;
+			else if (type_name == "BrokeDown")        t = ET::BrokeDown;
+			else if (type_name == "TaxRefused")       t = ET::TaxRefused;
+			else if (type_name == "ConfrontedLeader") t = ET::ConfrontedLeader;
+			else if (type_name == "Hoarded")          t = ET::Hoarded;
+			else if (type_name == "HidMoney")         t = ET::HidMoney;
+			else if (type_name == "PrepaidMiners")    t = ET::PrepaidMiners;
+			else if (type_name == "ClosedDoors")      t = ET::ClosedDoors;
+			else if (type_name == "FeignedIllness")   t = ET::FeignedIllness;
+			else if (type_name == "Flattered")        t = ET::Flattered;
+			else if (type_name == "VisitedFriend")    t = ET::VisitedFriend;
+			else if (type_name == "WentToTavern")     t = ET::WentToTavern;
+			else if (type_name == "AttendedFuneral")  t = ET::AttendedFuneral;
+			else if (type_name == "ConfidedGrief")    t = ET::ConfidedGrief;
+			else if (type_name == "Prayed")           t = ET::Prayed;
+			else if (type_name == "SankIntoGrief")    t = ET::SankIntoGrief;
+			if (t == ET::None) return;
+			EventBus::Publish(EventBus::Event{ t, actor, target, payload_f, payload_i });
+		});
+
+		// L1 — 持久 utility 偏置注入 (算积分一部分, 不衰减)
+		lua.set_function("inject_action_bias", [&reg](Entity e, int action_id, float delta) {
+			if (action_id < 0 || action_id >= ActionBiasComponent::MAX_ACTIONS) return;
+			if (!reg.has<ActionBiasComponent>(e)) {
+				ActionBiasComponent ab{};
+				reg.emplace<ActionBiasComponent>(e, ab);
+			}
+			auto& ab = reg.get<ActionBiasComponent>(e);
+			ab.bias[action_id] += delta;
+		});
+
+		// L2 — need pressure 注入 (改 expectation / satisfaction, 改变 NPC 看到的"现实")
+		lua.set_function("inject_need_pressure", [&reg](Entity e, int need_idx,
+			float satisfaction_delta, float expectation_delta) {
+			if (need_idx < 0 || need_idx >= NeedComponent::N) return;
+			if (!reg.has<NeedComponent>(e)) return;
+			auto& need = reg.get<NeedComponent>(e);
+			need.satisfaction[need_idx] = std::clamp(
+				need.satisfaction[need_idx] + satisfaction_delta, 0.0f, 10.0f);
+			need.expectation[need_idx]  = std::clamp(
+				need.expectation[need_idx]  + expectation_delta, 0.0f, 10.0f);
+		});
+
+		// L3 — emotion 注入 (临时刺激, 之后随 EmotionDecaySystem 衰减)
+		lua.set_function("inject_emotion", [&reg](Entity e, int emotion_idx, float delta) {
+			if (emotion_idx < 0 || emotion_idx >= EmotionComponent::E) return;
+			if (!reg.has<EmotionComponent>(e)) return;
+			auto& emo = reg.get<EmotionComponent>(e);
+			emo.intensity[emotion_idx] = std::clamp(
+				emo.intensity[emotion_idx] + delta, 0.0f, 1.0f);
+		});
 	}
 }
