@@ -1,0 +1,12 @@
+# 全部测试
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run_tests.ps1 -Target all
+
+# 只跑 Core 功能测试
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run_tests.ps1 -Target core
+
+# 只跑 Systems 功能测试
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run_tests.ps1 -Target systems
+
+# 只跑性能测试
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run_tests.ps1 -Target performance
+

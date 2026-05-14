@@ -42,7 +42,9 @@
 
 **五、性能基准与正确性验证**。通过自行编写的 cache miss 实测程序量化 SparseSet 双数组寻址在不同访问模式下的延迟差异；通过 false sharing 对照实验直观展示 AoS、padded、SoA 三种布局在多线程写入下的性能差距；使用 GoogleTest 编写 70 余个针对 ECS 核心的单元测试，确保 SparseSet 增删边界、Entity 生命周期、View 遍历交集、System 行为确定性的正确性。
 
-需要明确的是，受限于毕业设计的时间窗口，**以下三项工作不在本论文的研究范围之内**，将作为后续工作展开：（1）HD-2D 后处理的完整实现，包括 bloom、tilt-shift 景深、体积光、Z-buffer 修正；（2）面向美术与策划的可视化关卡编辑器；（3）AI 行为子系统，例如行为树或 GOAP。论文第 9 章将这三项分别列入短期、中期、远期的展望，并在章节结构上为它们预留了插入位置，以保证后续工作不需要重排前序章节。
+**六、NPC AI 管线的设计与实现**。在 ECS 之上构建完整的 NPC 自主行为系统，以需求-情绪-决策-执行为核心管线：以 `NeedComponent`（6 维需求权重 / 满足度 / 预期）和 `EmotionComponent`（5 维情绪强度与衰减率）承载角色的动机与情感状态；以确定性 FIFO 事件总线（EventBus）解耦事件生产者与消费者；以 `AppraisalSystem` 将事件映射为主观化情绪 delta，并通过 bitset 实现 NPC 间的信息差建模；以 Utility AI 公式驱动 `DecisionSystem` 在 16 种动作中自主选择最优行动；以 `ActionExecutionSystem` 在动作完成时发布新事件、形成涌现叙事闭环；以 `LineSystem` 的 Agency-Aware 过滤机制将内部状态转化为与角色立场一致的对话台词。最终通过四 NPC 端到端场景验证管线在"加税令"触发下的群体行为与信息不对称响应。
+
+需要明确的是，受限于毕业设计的时间窗口，**以下两项工作不在本论文的研究范围之内**，将作为后续工作展开：（1）HD-2D 后处理的完整实现，包括 bloom、tilt-shift 景深、体积光、Z-buffer 修正；（2）面向美术与策划的可视化关卡编辑器。论文第 9 章将这两项分别列入短期与中期展望，并在章节结构上为它们预留了插入位置，以保证后续工作不需要重排前序章节。
 
 ## 1.4 论文组织结构
 
@@ -56,7 +58,7 @@
 
 第 4 章详述 ECS 核心的设计与实现，包括 Entity 句柄布局、EntityPool 环形缓冲、SparseSet 双数组结构、组件 ID 的编译期分配、Registry 的统一接口与签名机制、以及多组件 View 的最小池驱动算法。
 
-第 5 章按子系统逐一介绍：渲染、物理、碰撞、输入、音频与调试 UI，每节聚焦于该系统在 ECS 框架下的设计要点与关键代码。
+第 5 章按子系统逐一介绍：渲染、物理、碰撞、输入、音频、调试 UI，以及 NPC AI 管线（EventBus / 需求-情绪组件 / AppraisalSystem / DecisionSystem / ActionExecutionSystem / LineSystem），每节聚焦于该系统在 ECS 框架下的设计要点与关键代码。
 
 第 6 章介绍资源管理与脚本子系统，包括 ResourceManager 的纹理 ID 化、Lua 状态初始化与 sol2 绑定、Tiled 地图解析流程、以及数据驱动的对话分支系统。
 

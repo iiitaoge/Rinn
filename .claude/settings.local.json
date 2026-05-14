@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(powershell *)"
+      "Bash(powershell *)",
+      "Bash(git *)",
+      "Bash(xargs grep -l \"raw_data\\\\|raw_entity_data\")"
     ]
   }
 }

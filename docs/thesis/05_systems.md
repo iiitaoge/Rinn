@@ -39,7 +39,7 @@ inline void Init(int width, int height, const char* title) {
 }
 ```
 
-相机配置为 60° 俯视的透视投影，目标点初始位于原点；后续每帧由 `UpdateCamera(target_x, target_z)` 接受脚本传来的玩家位置，让相机平滑跟随。`WORLD_SCALE = 0.01f` 表示"100 像素 = 1 米"，是脚本侧像素坐标与渲染侧米制坐标之间的统一换算系数。
+相机配置为 45° 视场角的透视投影（`fovy = 45.0f`），目标点初始位于原点；后续每帧由 `UpdateCamera(target_x, target_z)` 接受脚本传来的玩家位置，让相机平滑跟随。`WORLD_SCALE = 0.01f` 表示"100 像素 = 1 米"，是脚本侧像素坐标与渲染侧米制坐标之间的统一换算系数。
 
 中文字体加载是 raylib 在中文场景下需要特别处理的一环。引擎构造一个包含 ASCII、CJK 统一汉字（U+4E00–U+9FFF）、CJK 标点、全角符号、常用排版符号的 `codepoints` 数组，传入 `LoadFontEx` 一次性烘焙到字形图集。这种"全量加载"在简化业务的同时引入了较大的 GPU 内存占用，未来可优化为按需加载。
 
@@ -292,8 +292,139 @@ if (show_transform) {
 
 每个组件类型的展示由一个 `static bool` 控制，加新组件只需复制一个 `if (show_xxx)` 块即可。这种最简单的"复制-粘贴"扩展方式虽然不优雅，但与本章一贯的"单一职责、易于添加"原则一致；未来若组件数量爆炸，可以引入"组件类型 → 检视器函数指针"的注册表来实现真正的可插拔。
 
-> 代码引用：`src/DebugUI/DebugUI.hpp`
+> 代码引用：`src/UI/ComponentUI.hpp`（`Rinn::ComponentUI`）、`src/UI/AIDebugUI.hpp`（`Rinn::TimeControl` / `Rinn::EventLog` / `Rinn::NpcInspector`）
 
 ---
 
-至此，引擎当前实现的全部子系统已经介绍完毕。它们共享一致的"以 Registry 为输入、对组件做计算"的接口约定，彼此独立，便于教学拆解，也便于未来插入新系统（例如动画、AI、编辑器、后处理）。下一章将转向资源管理与脚本子系统，介绍引擎如何从外部世界获取数据并将控制权部分交还给 Lua 脚本。
+---
+
+## 5.7 NPC AI 子系统：需求-情绪-决策-执行管线
+
+Project Rinn 在六个迭代里程碑（M1–M6）中为 NPC 实现了一套完整的 AI 管线。其设计哲学不同于脚本式 if-else：NPC 不"被告知下一步该做什么"，而是持有内部状态（需求与情绪），经由事件评价（Appraisal）更新情绪，再以效用函数（Utility AI）自主选出最优行动。行动完成后产生的新事件再次入队，形成闭合的涌现叙事循环。以下按数据流向依次介绍各模块。
+
+### 5.7.1 状态基底：NeedComponent 与 EmotionComponent
+
+每个 NPC 实体挂载两个状态组件。
+
+`NeedComponent` 建模"动机层"，包含三个平行数组（各长 6）：
+
+- **weights**：稳态人格权重，每个 NPC 在初始化时由 Lua 脚本设置，反映该角色在资源 / 社交 / 亲情 / 安全 / 信仰 / 好奇心六个维度上的重视程度，整个游戏过程中不随事件改变。
+- **satisfaction**：当前满足度，动作完成时由 `ActionExecutionSystem` 累加 `gain`；若长期没有对应行动，它会随时间自然衰减。
+- **expectation**：对未来满足度的主观预测；`AppraisalSystem` 在处理信息事件（如"加税令下发"）时更新它，使 NPC 在满足度还未实际下降时就产生焦虑或愤怒。
+
+```cpp
+struct NeedComponent {
+    static constexpr int N = 6;  // 资源/社交/亲情/安全/信仰/好奇心
+    std::array<float, N> weights;
+    std::array<float, N> satisfaction;
+    std::array<float, N> expectation;
+};
+```
+
+`EmotionComponent` 建模"情绪层"，五个维度分别对应愤怒、焦虑、恐慌、悲伤、孤独：
+
+```cpp
+struct EmotionComponent {
+    static constexpr int E = 5;
+    std::array<float, E> intensity;   // 当前强度
+    std::array<Entity, E> target;     // 情绪指向（可 null）
+    std::array<float, E> decay_rate;  // 每秒衰减速率
+};
+```
+
+`EmotionDecaySystem` 在每帧调用，将 `intensity[i] -= decay_rate[i] * dt`（clamp 到 0），确保情绪在无新刺激时自然平息，避免状态永久积累。
+
+需求与情绪在组件层完全分离：`NeedComponent` 存储动机理由，`EmotionComponent` 存储当下感受，两者均满足 `is_trivially_copyable` 与 `is_aggregate` 约束，可无损进行 `memcpy`。
+
+### 5.7.2 EventBus：确定性发布-订阅
+
+事件总线（`EventSystem.hpp`）负责解耦事件的生产方与消费方，其接口由三个动词组成：
+
+- **Subscribe(type, handler)**：在初始化阶段调用，将 handler 函数对象存入 `unordered_map<EventType, vector<Handler>>` 的对应槽位。
+- **Publish(event)**：在任意时刻调用，将事件对象入 FIFO 队列。
+- **Drain()**：主循环每帧调用一次，将队列消费到空，依次 dispatch 给所有注册 handler。
+
+确定性设计是关键：FIFO 保证同帧事件的处理顺序与发布顺序完全一致；Drain 设有 `MAX_DRAIN_PER_FRAME` 上限，防止 handler 内再次 Publish 引发的无限循环。这使得 NPC 对外部刺激的响应在同等输入下完全可复现，满足单元测试的"确定性行为"验收条件。
+
+EventBus 中定义了 26 类事件类型（`EventBus::EventType`），分为两类：**信息事件**（如 `TaxIncreased`、`PriestDied`、`HeardLastWords`）由场景脚本或玩家行为触发，是叙事驱动力的来源；**动作完成事件**（如 `TaxRefused`、`Hoarded`、`AttendedFuneral`）由 `ActionExecutionSystem` 在动作执行完毕时发布，成为其他 NPC 目睹/得知信息的入口，从而将个体行为串联成群体叙事。
+
+### 5.7.3 AppraisalSystem：事件评价与信息差
+
+`AppraisalSystem`（`Systems/AppraisalSystem.hpp`）订阅所有信息事件和动作完成事件，在 handler 中执行三层计算：
+
+**第一层：情绪 delta 的主观解读（M6 F1）。** 对于每个 NPC witness，系统计算 `interpretation_factor`：
+
+```
+lens = clamp(need.weights[primary_need_idx] / 3.0, 0.3, 2.0)
+emotion_delta *= lens
+```
+
+这使得同一事件（如加税令）对一个"资源 weight = 6.0"的商人而言，产生的愤怒强度是"资源 weight = 1.5"的教士的 4 倍，由此编码了角色人格对外部刺激的差异性解读。
+
+**第二层：KnowledgeFact 信息差（M4）。** 系统为每类信息事件维护一个 `KnowledgeFactComponent` 实体，其中 `knowers` 是容量为 16384 位的 `bitset`，每个知道该事件的 NPC 对应一位被置 1。`AppraisalSystem::npc_knows(e, type)` 单指令完成知情查询：
+
+```cpp
+inline bool npc_knows(Entity npc, EventBus::EventType t) {
+    auto fact = get_fact(t);
+    if (!fact.has_value()) return false;
+    auto& fc = g_reg->get<KnowledgeFactComponent>(*fact);
+    return fc.knowers.test(npc.index());
+}
+```
+
+借助信息差，分支剧情脚本可以让"知道神父死亡的 NPC"与"不知道的 NPC"在面对同一玩家时给出截然不同的响应，而无需在脚本层维护全局状态表。
+
+**第三层：情绪 delta 超阈值触发立即重决策（中断机制）。** 若某次评价后情绪 delta 超过 `WITNESS_LINE_THRESHOLD`（默认 0.15），系统将该 NPC 的 `DecisionComponent.next_decision_tick` 置为 0，强制 `DecisionSystem` 在下一帧立即为其重新选择行动，而无需等待原定的决策冷却到期。
+
+### 5.7.4 DecisionSystem：Utility AI
+
+`DecisionSystem`（`Systems/DecisionSystem.hpp`）实现经典 Utility AI 的三因子效用公式：
+
+```
+utility(a) = gain(a) × salience(need) × emotion_modulator(a)
+```
+
+其中：
+
+- **gain(a)**：动作定义中的基础增益，反映完成后对主要需求的理论补偿。
+- **salience(need)**：需求的当前紧迫度，计算方式为 `weight × max(0, expectation - satisfaction)`，即"越重视且越匮乏的需求，越紧迫"。
+- **emotion_modulator(a)**：`1 + Σ(emotion.intensity[i] × a.modulators[i])`，将当前情绪状态叠加到效用上。例如愤怒型动作（`refuse_tax`）在愤怒强度高时效用大幅提升；悲伤型动作（`confide_grief`）在孤独感强时才会被优先选中。
+
+Action Catalog 以 `inline std::vector<ActionDef> action_catalog` 存储 16 种动作（对应愤怒 / 焦虑 / 恐慌 / 孤独 / 悲伤五类各 3 种 + idle），每条记录包含 `gain_need_idx`、`gain`、`modulators[5]`、`duration`、`complete_event`、`target_kind` 六个字段，数据直接以 C++ 聚合初始化内联声明于 `DecisionSystem.hpp`，运行时无额外加载开销。代码注释标注了未来可迁移至 Lua 配置表的改进路径，但当前阶段以简洁可读的内联方式实现。
+
+`DecisionSystem::Update` 每帧遍历所有拥有 `NeedComponent + DecisionComponent` 的实体，仅当 `next_decision_tick ≤ current_tick` 时计算全部动作的效用值并选出最大者，写入 `dec.current_action_id`，同时将 `next_decision_tick` 延后数 tick（默认 60 tick，约 1 秒），避免每帧重决策的性能浪费。
+
+### 5.7.5 ActionExecutionSystem 与涌现叙事
+
+`ActionExecutionSystem`（`Systems/ActionExecutionSystem.hpp`）在每帧推进 `dec.action_progress += dt / duration`，完成时执行三件事：
+
+1. **补偿 satisfaction**：`need.satisfaction[gain_need_idx] += gain`，满足度提升使下一次决策时该需求的 salience 降低。
+2. **发布完成事件**：若 `act.complete_event ≠ None`，调用 `EventBus::Publish`，事件将在下一帧 Drain 时被 `AppraisalSystem` 消费。这是"个体行为被他人目睹"机制的根基——某个 NPC 拒绝纳税（`TaxRefused`）之后，所有订阅此事件的 NPC 都会收到评价刺激，依据各自的权重产生不同情绪响应。
+3. **置零 next_decision_tick**：强制当前 NPC 立即重新决策，在行动完成后立刻选择下一个目标。
+
+`resolve_target` 根据 `TargetKind` 解析动作目标：`Leader` 类动作（如 `refuse_tax`、`confront_leader`）会在 Registry 中查找持有 `IsLeader` 标签的实体，`Self` 类动作指向 actor 自身，`NoTarget` 类动作传入空 Entity。Agency-Aware 目标解析确保即使 leader 实体在运行时切换，相关动作也能正确找到新目标。
+
+### 5.7.6 LineSystem：Agency-Aware 台词立场一致性
+
+`LineSystem`（`src/Systems/LineSystem.hpp`）是 M6 新增的顶层系统，负责将内部状态映射为 NPC 的可见台词。其核心是两层机制：**立场一致性**与 **Softmax 采样**。
+
+台词数据以 `inline std::vector<LineDef> line_catalog` 内联于 `LineSystem.hpp`，共 34 条记录，每条 `LineDef` 包含：
+- `template_str`：台词模板（`{actor}` / `{target}` 占位符），
+- `emotion_modulators[5]`：情绪调制权重，
+- `need_relevance[6]`：需求相关度，
+- `trigger_event`：触发事件类型（`None` 表示通用候选），
+- `base_weight`：基础分值，
+- `subject_kind`：台词评价对象类别（`ActorOfEvent` / `NoSubject`），
+- `attitude`：对该对象的态度极性（-1 至 +1）。
+
+台词选择算法 `select_line` 的计算流程与 `DecisionSystem` 同构：`score = base_weight × emotion_score × need_score × stance_factor`。其中 `stance_factor` 是立场一致性因子：`stance = 0.6 + attitude × affinity × 0.5`（clamp 到 [0.1, 1.2]）。这意味着当说话者与事件 actor 的 `RelationComponent.affinity` 和台词 `attitude` 同号时，该台词权重轻微提升；反号时被大幅压制（软约束，不完全屏蔽）。村长不会对自己发出攻击性台词、actor 不会选到旁观者台词，均由此机制自然涌现，而非硬编码例外逻辑。
+
+候选台词通过 Softmax 采样（温度参数 `TEMPERATURE = 1.0`）随机选取，将高分台词的概率提高但不完全确定化，保留一定多样性。选出的台词实例化后（替换 `{actor}` 等占位符）注入 `TextBubble` 组件，由 `RenderSystem::DrawTextBubbles` 在下一帧渲染到屏幕空间。
+
+台词触发有两个钩子入口：`on_action_chosen`（NPC 自己完成动作时，bypass 冷却，必须可见）与 `on_witness_react`（目睹他人行为的 witness 反应，受 `COOLDOWN_SEC = 4.0` 冷却限制，防止一波事件同时刷屏）。
+
+> 代码引用：`src/Systems/EventSystem.hpp`、`src/Systems/AppraisalSystem.hpp`、`src/Systems/DecisionSystem.hpp`、`src/Systems/ActionExecutionSystem.hpp`、`src/Systems/LineSystem.hpp`、`src/Components/Components.hpp`（NeedComponent / EmotionComponent / DecisionComponent / KnowledgeFactComponent）
+
+---
+
+至此，引擎当前实现的全部子系统已经介绍完毕。渲染、物理、碰撞、输入、音频、调试 UI 六个传统子系统（5.1–5.6）与 NPC AI 管线（5.7）共享一致的"以 Registry 为输入、对组件做计算"的接口约定，彼此独立，便于教学拆解，也便于未来插入新系统（动画、编辑器、后处理）。下一章将转向资源管理与脚本子系统，介绍引擎如何从外部世界获取数据并将控制权部分交还给 Lua 脚本。

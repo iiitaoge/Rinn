@@ -98,6 +98,8 @@ lua.set_function("set", [&reg](Entity e, const std::string& name, sol::table dat
 
 除了组件操作，绑定层还把以下能力以最薄的 facade 形式暴露给 Lua：
 
+**表 6.1 Lua facade 接口清单**
+
 | Lua 函数 | C++ 实现 | 用途 |
 |----------|---------|------|
 | `load_texture(path)` | `res.load_texture(path)` | 返回纹理 ID |

@@ -65,7 +65,7 @@ namespace Rinn::RenderSystem {
         flat_normal = LoadTextureFromImage(img);
 
         // 加载测试 shader
-        test_shader = LoadShader("../../../assets/shaders/test.vs", "../../../assets/shaders/test.fs");
+        test_shader = LoadShader("../../../assets/shaders/shader.vs", "../../../assets/shaders/shader.fs");
         // 建立 C++和GLSL的映射，准备传uniform
         LocT = GetShaderLocation(test_shader, "tangent");
         LocB = GetShaderLocation(test_shader, "bitangent");

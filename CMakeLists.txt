@@ -139,14 +139,30 @@ if(BUILD_TESTS)
     FetchContent_MakeAvailable(googletest)
 
     add_executable(ecs_tests tests/ecs_test.cpp)
+    add_executable(systems_tests tests/systems_test.cpp)
+    add_executable(cache_benchmark tests/cache_benchmark.cpp)
+    add_executable(false_sharing_bench tests/false_sharing_bench.cpp)
+    add_executable(pipeline_benchmark tests/pipeline_benchmark.cpp)
 
     target_include_directories(ecs_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(ecs_tests PRIVATE GTest::gtest_main)
+    target_include_directories(systems_tests PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${imgui_SOURCE_DIR}
+    )
+    target_link_libraries(ecs_tests PRIVATE GTest::gtest_main raylib)
+    target_link_libraries(systems_tests PRIVATE GTest::gtest_main raylib)
+    target_include_directories(pipeline_benchmark PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(pipeline_benchmark PRIVATE raylib)
 
     if(MSVC)
         target_compile_options(ecs_tests PRIVATE /W4 /permissive- /utf-8)
+        target_compile_options(systems_tests PRIVATE /W4 /permissive- /utf-8)
+        target_compile_options(cache_benchmark PRIVATE /W4 /permissive- /utf-8 /O2)
+        target_compile_options(false_sharing_bench PRIVATE /W4 /permissive- /utf-8 /O2)
+        target_compile_options(pipeline_benchmark PRIVATE /W4 /permissive- /utf-8 /O2 /arch:AVX2)
     endif()
 
     include(GoogleTest)
     gtest_discover_tests(ecs_tests)
+    gtest_discover_tests(systems_tests)
 endif()

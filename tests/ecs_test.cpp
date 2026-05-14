@@ -20,6 +20,9 @@
 #include <algorithm>
 #include <unordered_set>
 
+using Rinn::Entity;
+using Rinn::MAX_ENTITIES;
+
 // ============================================================================
 // 测试专用组件（与游戏组件解耦，避免 raylib 依赖）
 // ============================================================================
@@ -28,6 +31,73 @@ struct Speed    { float vx, vy; };
 struct Health   { int hp; };
 struct TagA     {};
 struct TagB     {};
+struct ComponentIdA {};
+struct ComponentIdB {};
+
+// ████████████████████████████████████████████████████████████████████████████
+// (0) Core 基础类型与组件 ID
+// ████████████████████████████████████████████████████████████████████████████
+
+TEST(EntityTest, DefaultConstructsNullEntity) {
+    Entity e;
+
+    EXPECT_TRUE(e.is_null());
+    EXPECT_EQ(e.id, Entity::NULL_ID);
+}
+
+TEST(EntityTest, PacksIndexAndGenerationIntoHandle) {
+    Entity e(42, 7);
+
+    EXPECT_EQ(e.index(), 42);
+    EXPECT_EQ(e.generation(), 7);
+    EXPECT_EQ(e.id, (uint32_t(7) << Entity::GENERATION_SHIFT) | 42u);
+    EXPECT_FALSE(e.is_null());
+}
+
+TEST(EntityTest, MaxIndexAndGenerationIsReservedForNullSentinel) {
+    Entity e(0xFFFF, 0xFFFF);
+
+    EXPECT_EQ(e.index(), 0xFFFF);
+    EXPECT_EQ(e.generation(), 0xFFFF);
+    EXPECT_TRUE(e.is_null());
+    EXPECT_EQ(e.id, Entity::NULL_ID);
+}
+
+TEST(EntityTest, SupportsMaxIndexWhenGenerationIsNotNullSentinel) {
+    Entity e(0xFFFF, 0);
+
+    EXPECT_EQ(e.index(), 0xFFFF);
+    EXPECT_EQ(e.generation(), 0);
+    EXPECT_FALSE(e.is_null());
+}
+
+TEST(EntityTest, ComparesByWholeHandle) {
+    Entity a(3, 1);
+    Entity same(3, 1);
+    Entity different_generation(3, 2);
+    Entity different_index(4, 1);
+
+    EXPECT_EQ(a, same);
+    EXPECT_NE(a, different_generation);
+    EXPECT_NE(a, different_index);
+}
+
+TEST(ComponentIdTest, SameTypeAlwaysReturnsSameId) {
+    auto first = Rinn::get_component_type_id<ComponentIdA>();
+    auto second = Rinn::get_component_type_id<ComponentIdA>();
+
+    EXPECT_EQ(first, second);
+    EXPECT_LT(first, Rinn::MAX_COMPONENTS);
+}
+
+TEST(ComponentIdTest, DifferentTypesReceiveDifferentIds) {
+    auto a = Rinn::get_component_type_id<ComponentIdA>();
+    auto b = Rinn::get_component_type_id<ComponentIdB>();
+
+    EXPECT_NE(a, b);
+    EXPECT_LT(a, Rinn::MAX_COMPONENTS);
+    EXPECT_LT(b, Rinn::MAX_COMPONENTS);
+}
 
 
 // ████████████████████████████████████████████████████████████████████████████
@@ -187,6 +257,21 @@ TEST_F(SparseSetTest, Clear_ThenReAdd) {
     EXPECT_FLOAT_EQ(pos.x, 42.0f);
 }
 
+TEST_F(SparseSetTest, Reserve_DoesNotChangeExistingMappings) {
+    Entity e0(0, 0);
+    Entity e1(1, 0);
+    pool.emplace(e0, Position{1.0f, 2.0f});
+    pool.emplace(e1, Position{3.0f, 4.0f});
+
+    pool.reserve(128);
+
+    EXPECT_TRUE(pool.has(e0));
+    EXPECT_TRUE(pool.has(e1));
+    EXPECT_EQ(pool.size(), 2u);
+    EXPECT_FLOAT_EQ(pool.get(e0).x, 1.0f);
+    EXPECT_FLOAT_EQ(pool.get(e1).x, 3.0f);
+}
+
 // --- 边界条件 ---
 
 TEST_F(SparseSetTest, Boundary_EntityIndex0) {
@@ -240,6 +325,24 @@ TEST_F(SparseSetTest, EntityData_AfterSwapAndPop) {
     EXPECT_EQ(data[1], e1);
 }
 
+TEST_F(SparseSetTest, RawData_MatchesDenseEntityOrderAfterRemoval) {
+    Entity e0(0, 0), e1(1, 0), e2(2, 0);
+    pool.emplace(e0, Position{10.0f, 0.0f});
+    pool.emplace(e1, Position{20.0f, 0.0f});
+    pool.emplace(e2, Position{30.0f, 0.0f});
+
+    pool.remove(e1);
+
+    ASSERT_EQ(pool.size(), 2u);
+    const Position* positions = pool.raw_data();
+    const Entity* entities = pool.raw_entity_data();
+
+    EXPECT_EQ(entities[0], e0);
+    EXPECT_FLOAT_EQ(positions[0].x, 10.0f);
+    EXPECT_EQ(entities[1], e2);
+    EXPECT_FLOAT_EQ(positions[1].x, 30.0f);
+}
+
 // --- 迭代器 ---
 
 TEST_F(SparseSetTest, Iterator_RangeForLoop) {
@@ -252,6 +355,18 @@ TEST_F(SparseSetTest, Iterator_RangeForLoop) {
         sum += pos.x;
     }
     EXPECT_FLOAT_EQ(sum, 60.0f);
+}
+
+TEST_F(SparseSetTest, Iterator_AllowsMutationThroughDenseOrder) {
+    pool.emplace(Entity(0, 0), Position{1.0f, 0.0f});
+    pool.emplace(Entity(1, 0), Position{2.0f, 0.0f});
+
+    for (auto& pos : pool) {
+        pos.x += 10.0f;
+    }
+
+    EXPECT_FLOAT_EQ(pool.get(Entity(0, 0)).x, 11.0f);
+    EXPECT_FLOAT_EQ(pool.get(Entity(1, 0)).x, 12.0f);
 }
 
 
@@ -320,6 +435,52 @@ TEST_F(EntityLifecycleTest, Destroy_RemovesAllComponents) {
     Entity reused = registry.create_entity();
     EXPECT_FALSE(registry.has<Position>(reused));
     EXPECT_FALSE(registry.has<Health>(reused));
+}
+
+TEST_F(EntityLifecycleTest, Remove_ComponentClearsSignatureAndPool) {
+    Entity e = registry.create_entity();
+    (void)registry.emplace<Position>(e, Position{1.0f, 2.0f});
+    (void)registry.emplace<Health>(e, Health{100});
+
+    registry.remove<Position>(e);
+
+    EXPECT_FALSE(registry.has<Position>(e));
+    EXPECT_TRUE(registry.has<Health>(e));
+    EXPECT_FALSE(registry.try_get<Position>(e).has_value());
+    ASSERT_TRUE(registry.try_get<Health>(e).has_value());
+    EXPECT_EQ(registry.try_get<Health>(e)->get().hp, 100);
+}
+
+TEST_F(EntityLifecycleTest, TryGet_ReturnsReferenceForLiveComponent) {
+    Entity e = registry.create_entity();
+    (void)registry.emplace<Health>(e, Health{10});
+
+    auto health = registry.try_get<Health>(e);
+    ASSERT_TRUE(health.has_value());
+    health->get().hp = 25;
+
+    EXPECT_EQ(registry.get<Health>(e).hp, 25);
+}
+
+TEST_F(EntityLifecycleTest, TryGet_ReturnsNulloptForMissingDeadAndNullEntities) {
+    Entity alive = registry.create_entity();
+    Entity dead = registry.create_entity();
+    registry.destroy_entity(dead);
+
+    EXPECT_FALSE(registry.try_get<Health>(alive).has_value());
+    EXPECT_FALSE(registry.try_get<Health>(dead).has_value());
+    EXPECT_FALSE(registry.try_get<Health>(Entity{}).has_value());
+}
+
+TEST_F(EntityLifecycleTest, Pool_ReturnsReusableTypedPool) {
+    Entity e = registry.create_entity();
+    auto& pool = registry.pool<Position>();
+
+    pool.emplace(e, Position{5.0f, 6.0f});
+
+    EXPECT_TRUE(pool.has(e));
+    EXPECT_FLOAT_EQ(pool.get(e).x, 5.0f);
+    EXPECT_EQ(&pool, &registry.pool<Position>());
 }
 
 TEST_F(EntityLifecycleTest, Destroy_MiddleEntity_OthersUnaffected) {

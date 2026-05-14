@@ -6,10 +6,12 @@ docs/
 # --- Build Output & Directories ---
 
 build/
+build-tests/
 out/
 bin/
 lib/
 external/
+reports/
 
 cmake-build-*/
 _deps/

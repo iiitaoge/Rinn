@@ -31,13 +31,13 @@ cmake --build build --target ecs_tests
 
 **表 8.1 ECS 单元测试覆盖统计**
 
-| 类别 | 用例数（约） | 主要 EXPECT 数量级 |
-|------|------------|-------------------|
-| SparseSet 增删改查 | 17 | 50+ |
-| Entity 生命周期 | 11 | 30+ |
-| View 遍历 | 11 | 30+ |
-| System 确定性 | 7 | 20+ |
-| **合计** | **46** | **130+** |
+| 类别 | 用例数 | 主要 EXPECT 数量级 |
+|------|--------|-------------------|
+| SparseSet 增删改查（`SparseSetTest`） | 21 | 70+ |
+| Entity 核心类型与生命周期（`EntityTest` + `ComponentIdTest` + `EntityLifecycleTest`） | 24 | 60+ |
+| View 遍历（`ViewTest`） | 11 | 35+ |
+| System 确定性（`SystemDeterminismTest`） | 7 | 20+ |
+| **合计** | **63** | **170+** |
 
 全部用例在持续集成中应稳定通过，作为 ECS 核心日常开发的"安全网"。
 

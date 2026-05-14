@@ -20,8 +20,9 @@
 #include <algorithm>
 #include <cstring>      // memset
 
-#include "Core/World.hpp"
-#include "Systems/PhysicsSystem.hpp"
+#include "Core/Registry.hpp"
+#include "Components/Components.hpp"
+#include "Systems/PhysicSystem.hpp"
 
 using namespace Rinn;
 
@@ -36,8 +37,8 @@ struct CycleTimer {
 void setup_sequential(Registry& reg, int N) {
     for (int i = 0; i < N; i++) {
         auto e = reg.create_entity();
-        reg.emplace<Transform>(e, (float)i, (float)i, 0);
-        reg.emplace<Velocity>(e, 1.0f, 1.0f);
+        (void)reg.emplace<Rinn::Transform>(e, Rinn::Transform{(float)i, (float)i, 0});
+        (void)reg.emplace<Rinn::Velocity>(e, Rinn::Velocity{1.0f, 1.0f});
     }
 }
 
@@ -49,8 +50,8 @@ void setup_scattered(Registry& reg, int N) {
     all.reserve(total);
     for (int i = 0; i < total; i++) {
         auto e = reg.create_entity();
-        reg.emplace<Transform>(e, (float)i, (float)i, 0);
-        reg.emplace<Velocity>(e, 1.0f, 1.0f);
+        (void)reg.emplace<Rinn::Transform>(e, Rinn::Transform{(float)i, (float)i, 0});
+        (void)reg.emplace<Rinn::Velocity>(e, Rinn::Velocity{1.0f, 1.0f});
         all.push_back(e);
     }
     // 随机删除多余的 0.5N 个
@@ -162,10 +163,10 @@ int main() {
         SoA soa;
 
         run_bench("ECS-Sequential", [&]{ setup_sequential(reg_seq, N); },
-                  [&]{ PhysicsSystem::Update(reg_seq, 0.016f); }, N);
+                  [&]{ PhysicSystem::update(reg_seq, 0.016f); }, N);
 
         run_bench("ECS-Scattered",  [&]{ setup_scattered(reg_scat, N); },
-                  [&]{ PhysicsSystem::Update(reg_scat, 0.016f); }, N);
+                  [&]{ PhysicSystem::update(reg_scat, 0.016f); }, N);
 
         run_bench("SoA-Scalar",     [&]{ soa.alloc(N); },
                   [&]{ update_soa_scalar(soa, 0.016f); }, N);

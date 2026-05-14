@@ -16,7 +16,7 @@
 
 ## 3.2 分层架构图
 
-Project Rinn 的整体结构可划分为五层，自底向上分别是：核心层、子系统层、资源与脚本层、调试层、应用层。下图给出了模块在各层的归属，虚线方框表示当前未实现、为后续工作预留的位置。
+Project Rinn 的整体结构可划分为五层，自底向上分别是：核心层、子系统层、资源与脚本层、调试层、应用层。如图 3.1 所示，模块按职责被划分到不同层次，虚线方框表示当前未实现、为后续工作预留的位置。
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -36,12 +36,15 @@ Project Rinn 的整体结构可划分为五层，自底向上分别是：核心�
 │  │  ResourceManager │  │  ScriptContext + LuaBinder (sol2)│    │
 │  └──────────────────┘  └──────────────────────────────────┘    │
 ├─────────────────────────────────────────────────────────────────┤
-│  子系统层 (Systems)                                             │
-│  ┌─────────┐ ┌─────────┐ ┌──────────┐ ┌───────┐ ┌──────────┐  │
-│  │ Render  │ │ Physic  │ │Collision │ │ Input │ │  Audio   │  │
-│  └─────────┘ └─────────┘ └──────────┘ └───────┘ └──────────┘  │
-│  ┌── 预留: Animation / AI / Editor 子系统 ─────────────────┐   │
-│  └──────────────────────────────────────────────────────────┘   │
+│  子系统层 (Systems)                                                      │
+│  ┌─────────┐ ┌─────────┐ ┌──────────┐ ┌───────┐ ┌──────────┐           │
+│  │ Render  │ │ Physic  │ │Collision │ │ Input │ │  Audio   │           │
+│  └─────────┘ └─────────┘ └──────────┘ └───────┘ └──────────┘           │
+│  ┌─── NPC AI 管线 ──────────────────────────────────────────────────┐   │
+│  │ EventBus │ Appraisal │ Decision(UtilityAI) │ ActionExec │ Line  │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+│  ┌── 预留: Animation / Editor 子系统 ──────────────────────────────┐   │
+│  └──────────────────────────────────────────────────────────────────┘   │
 ├─────────────────────────────────────────────────────────────────┤
 │  核心层 (Core ECS)                                              │
 │  ┌──────────────────────────────────────────────────────────┐   │
@@ -53,9 +56,11 @@ Project Rinn 的整体结构可划分为五层，自底向上分别是：核心�
                           │  raylib 5.5 / lua / sol2 / Dear ImGui (第三方依赖)
 ```
 
+**图 3.1 Project Rinn 分层架构图**
+
 **核心层**承载 ECS 的基础抽象，不依赖任何其他模块；它所提供的 Entity、组件池、Registry、View 是引擎的"语法基底"。
 
-**子系统层**为引擎提供"动作能力"。每个子系统通过 `Registry&` 访问数据，对外暴露最小 API（如 `RenderSystem::DrawSprites(reg, res)`、`PhysicSystem::update(reg, dt)`），系统之间不直接互相依赖。预留的虚线框表示未来加入的 AnimationSystem / AISystem / EditorSystem 等可以按同样模式插入此层而不影响其他模块。
+**子系统层**为引擎提供"动作能力"。每个子系统通过 `Registry&` 访问数据，对外暴露最小 API，系统之间不直接互相依赖。当前已实现渲染、物理、碰撞、输入、音频五个传统子系统，以及由 EventBus / AppraisalSystem / DecisionSystem / ActionExecutionSystem / LineSystem 组成的 NPC AI 管线。预留的虚线框表示未来加入的 AnimationSystem / EditorSystem 等可以按同样模式插入此层而不影响其他模块。
 
 **资源与脚本层**承担 ECS 与外部世界（磁盘资源、用户脚本）之间的桥接。`ResourceManager` 使用 ID 化的纹理句柄替代裸指针；`LuaBinder` 把组件操作、资源加载、输入查询、相机控制等接口暴露给 Lua。
 
@@ -77,7 +82,7 @@ Project Rinn 的整体结构可划分为五层，自底向上分别是：核心�
 | 组件 ID | `src/Core/ComponentID.hpp` | 模板化组件类型 ID 分配 |
 | 稀疏集 | `src/Core/SparseSet.hpp` | `ISparseSet` 接口与 `SparseSet<T>` 模板 |
 | 注册表 | `src/Core/Registry.hpp` | `EntityPool`、`Registry`、`View<T...>` |
-| 组件 | `src/Components/Components.hpp` | `Transform`、`Sprite`、`Velocity`、`Collider`、`TextBubble`、标签组件 |
+| 组件 | `src/Components/Components.hpp` | `Transform`、`Sprite`、`Velocity`、`Collider`、`TextBubble`、标签组件；`NeedComponent`、`EmotionComponent`、`DecisionComponent`、`KnowledgeFactComponent`、`RelationComponent` 等 NPC AI 组件 |
 | 资源 | `src/Resources/ResourceManager.hpp` | 纹理 ID 化与生命周期管理 |
 | 脚本 | `src/Scripting/ScriptContext.hpp` | Lua state 初始化 |
 | 脚本绑定 | `src/Scripting/LuaBinder.hpp` | sol2 双向绑定 |
@@ -86,14 +91,14 @@ Project Rinn 的整体结构可划分为五层，自底向上分别是：核心�
 | 碰撞 | `src/Systems/CollisionSystem.hpp` | 空间哈希 + AABB + MTV 解算 |
 | 输入 | `src/Systems/InputSystem.hpp` | raylib 输入封装 |
 | 音频 | `src/Systems/AudioSystem.hpp` | 单 BGM 流 |
-| 调试 UI | `src/DebugUI/DebugUI.hpp` | 实体检视器 |
+| 调试 UI | `src/UI/ComponentUI.hpp`、`src/UI/AIDebugUI.hpp` | 实体检视器、AI 调试面板 |
 | 入口 | `src/main.cpp` | 主循环 |
 
 构建系统采用 CMake 3.28，第三方依赖通过 `FetchContent`（raylib、Dear ImGui、rlImGui、GoogleTest）与本地子目录（lua、sol2）混合管理；测试通过 `cmake -DBUILD_TESTS=ON ..` 显式启用。MSVC 编译选项设置为 `/W4 /permissive- /utf-8`，强制项目维持高标准的诊断输出与严格的标准遵循。
 
 ## 3.4 主循环与数据流
 
-引擎的主循环位于 `src/main.cpp`，结构极为简洁。启动阶段依次完成窗口、音频、调试 UI 与 ECS 注册表的初始化，然后通过 `lua.script_file` 加载 `scripts/main.lua` 并执行其顶层语句（建立场景、放置实体、订阅 `on_update`），最后进入 `while (!ShouldClose())` 循环。
+引擎的主循环位于 `src/main.cpp`，结构极为简洁。如图 3.2 所示，启动阶段依次完成窗口、音频、调试 UI 与 ECS 注册表的初始化，然后通过 `lua.script_file` 加载 `scripts/main.lua` 并执行其顶层语句（建立场景、放置实体、订阅 `on_update`），最后进入 `while (!ShouldClose())` 循环。
 
 ```
 ┌────────────────────────────────────────────────┐
@@ -108,23 +113,30 @@ Project Rinn 的整体结构可划分为五层，自底向上分别是：核心�
                          │
         ┌────────────────▼─────────────────┐
         │  while (!ShouldClose())          │
-        │   ┌──────────────────────────┐   │
-        │   │ 1. BeginFrame (3D)       │   │
-        │   │ 2. lua["on_update"]()    │   │  ← 策略层
-        │   │ 3. PhysicSystem::update  │   │  ← 机制层
-        │   │ 4. CollisionSystem::    │   │
-        │   │    detect + resolve     │   │
-        │   │ 5. RenderSystem::        │   │
-        │   │    DrawSprites           │   │
-        │   │ 6. EndCameraMode         │   │
-        │   │ 7. DrawTextBubbles       │   │  ← 屏幕空间 UI
-        │   │ 8. AudioSystem::Update   │   │
-        │   │ 9. DrawText (FPS)        │   │
-        │   │10. DebugUI::Draw         │   │
-        │   │11. EndFrame              │   │
-        │   └──────────────────────────┘   │
+        │   ┌──────────────────────────────────┐   │
+        │   │  1. BeginFrame (3D)             │   │
+        │   │  2. lua["on_update"]()          │   │  ← 策略层（输入/剧情/相机）
+        │   │  3. TimeControl::Tick(dt)       │   │  ← 暂停/倍速包装
+        │   │  4. PhysicSystem::update        │   │  ← 机制层
+        │   │  5. CollisionSystem::           │   │
+        │   │     detect + resolve            │   │
+        │   │  6. EmotionDecaySystem::Update  │   │  ← NPC AI 管线
+        │   │  7. DecisionSystem::Update      │   │
+        │   │  8. ActionExecutionSystem::Update│  │
+        │   │  9. LineSystem::Tick            │   │
+        │   │ 10. EventBus::Drain()           │   │  ← FIFO 事件派发
+        │   │ 11. RenderSystem::DrawSprites   │   │  ← 渲染
+        │   │ 12. EndCameraMode               │   │
+        │   │ 13. DrawTextBubbles             │   │  ← 屏幕空间 UI
+        │   │ 14. AudioSystem::Update         │   │
+        │   │ 15. DrawText (FPS)              │   │
+        │   │ 16. DebugUI / AIDebugUI::Draw   │   │
+        │   │ 17. EndFrame                    │   │
+        │   └──────────────────────────────────┘   │
         └──────────────────────────────────┘
 ```
+
+**图 3.2 Project Rinn 主循环执行流**
 
 执行顺序背后体现了几条设计原则。
 
@@ -137,11 +149,10 @@ Project Rinn 的整体结构可划分为五层，自底向上分别是：核心�
 **未来扩展的插入点**。以下是可预见的扩展方向及其在主循环中的预期插入位置：
 
 - **AnimationSystem**：插在 PhysicSystem 之后、CollisionSystem 之前，根据状态机更新精灵帧。
-- **AISystem**：插在 Lua `on_update` 与 PhysicSystem 之间，负责由 C++ 主导的高频 AI 决策；Lua 仅承担低频策略。
 - **EditorSystem**：与 DebugUI 同层，但单独占据 ImGui 子窗口；编辑模式下可暂停 PhysicSystem 与 CollisionSystem。
 - **PostProcessingSystem**：插在所有 3D 提交之后、UI 之前，承担 bloom / tilt-shift 等离屏渲染。
 
-这些扩展均不需要改动现有 System 的接口或 ECS 核心。
+NPC AI 管线（步骤 6–10）已在当前版本实现，详见第 5.7 节。上述扩展均不需要改动现有 System 的接口或 ECS 核心。
 
 ---
 

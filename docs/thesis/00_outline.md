@@ -17,7 +17,7 @@
 | 2 | 相关技术与理论基础 | ~3500 | — | pending |
 | 3 | 引擎总体架构与模块划分 | ~2000 | `main.cpp`, `CMakeLists.txt` | pending |
 | 4 | ECS 核心设计与实现 | ~4000 | `Core/*.hpp`, `Components/Components.hpp` | pending |
-| 5 | 系统模块的实现 | ~3500 | `Systems/*.hpp`, `DebugUI/DebugUI.hpp` | pending |
+| 5 | 系统模块的实现 | ~5000 | `Systems/*.hpp`, `src/UI/ComponentUI.hpp`, `src/UI/AIDebugUI.hpp` | pending |
 | 6 | 资源管理与脚本系统 | ~2500 | `Resources/`, `Scripting/`, `scripts/*.lua` | pending |
 | 7 | HD-2D 渲染原理验证 | ~2000 | `RenderSystem.hpp`, `assets/shaders/test.{vs,fs}` | pending |
 | 8 | 性能测试与分析 | ~2500 | `tests/{cache,false_sharing,ecs}_*.cpp` | pending |
@@ -32,12 +32,12 @@
 
 ## 可扩展性设计原则
 
-未来要做但现在没做的：HD-2D 完善、编辑器、AI 驱动。论文骨架按以下原则避免后续重排：
+当前已完成：HD-2D 原理验证、NPC AI 管线。未来待做：HD-2D 后处理完善、编辑器。论文骨架按以下原则避免后续重排：
 
-1. **第 3 章架构图分层**：内核（ECS） / 子系统（Render/Physics/...） / 上层（脚本 / 编辑器 / AI）。未来 Editor / AI 模块只需新增方框，原图不动。
-2. **第 5 章子系统并列**：每个 System 一节。未来新增 AnimationSystem / AISystem / EditorSystem 各加一节即可，章节号不变。
-3. **第 7 章 HD-2D 写"原理验证"而非"完整实现"**：明确标注当前是硬编码法线的实验阶段，深度排序、bloom、tilt-shift 列入第 9 章展望。
-4. **第 9 章展望分级**：短期（HD-2D 深化）/ 中期（编辑器）/ 远期（AI 驱动）。任一项做完后从展望"提级"为正章节。
+1. **第 3 章架构图分层**：内核（ECS） / 子系统（Render/Physics/NPC AI/...） / 上层（脚本 / 编辑器）。未来 Editor 模块只需新增方框，原图不动。
+2. **第 5 章子系统并列**：每个 System 一节。5.7 为 NPC AI 管线；未来新增 AnimationSystem / EditorSystem 各加一节即可，章节号不变。
+3. **第 7 章 HD-2D 写"原理验证"而非"完整实现"**：明确标注当前实现 TBN 光照 + 环境光混合，bloom / tilt-shift 列入第 9 章展望。
+4. **第 9 章展望分级**：短期（HD-2D 后处理）/ 中期（编辑器）/ 远期（AI 深化）。任一项做完后从展望"提级"为正章节。
 5. **新章节插入位置**：固定在「第 7 章 HD-2D」之后、「性能测试」之前。例如做完编辑器后，可插入「第 8 章 编辑器设计与实现」，原 8/9 顺延为 9/10。前 7 章不动。
 
 ---
@@ -61,9 +61,10 @@
   - 实现自研 ECS（Entity 句柄 / SparseSet / Registry / View）
   - 集成基础子系统（渲染 / 物理 / 碰撞 / 输入 / 音频 / 调试 UI）
   - 实现 Lua 脚本子系统并完成 Tiled 地图驱动的小型 demo
-  - 进行 HD-2D 风格的渲染原理验证（法线区分、光照雏形）
+  - 进行 HD-2D 风格的渲染原理验证（法线区分、TBN 光照）
   - 通过 cache / false-sharing benchmark 验证数据布局有效性
-  - **明确不做**：完整 HD-2D 后处理、可视化编辑器、AI 行为系统（列入展望）
+  - 实现 NPC AI 管线（Need/Emotion → EventBus → Appraisal → Utility AI Decision → ActionExecution → Line）
+  - **明确不做**：完整 HD-2D 后处理（bloom/tilt-shift）、可视化编辑器（列入展望）
 - **1.4 论文组织结构** (~300)
   - 各章简介 + 阅读路径建议
 
@@ -107,7 +108,7 @@
 - **3.2 分层架构图** (~700)
   - 图 3.1：分层架构图（内核 / 子系统 / 资源 / 脚本 / 调试 / 上层应用）
   - 各层职责
-  - **可扩展性说明**：编辑器 / AI 子系统在图中以虚线框预留位置
+  - **可扩展性说明**：编辑器 / AnimationSystem 在图中以虚线框预留位置；NPC AI 管线已实现（步骤 6–10）
 - **3.3 模块清单与文件结构** (~400)
   - 表 3.1：源码目录与对应模块
   - 引言级 `CMakeLists.txt` 解读
@@ -153,10 +154,10 @@
 
 ---
 
-### 第 5 章 系统模块的实现 (~3500 字)
+### 第 5 章 系统模块的实现 (~5000 字)
 
 - **5.1 RenderSystem：三维场景下的精灵渲染** (~800)
-  - Camera3D 60° 俯视透视
+  - Camera3D 45° 透视（fovy = 45.0f）
   - WORLD_SCALE 像素↔米换算
   - 中文字体加载与 CJK 字符集
   - 两趟渲染：地面瓦片 → 立式精灵 + 排序
@@ -181,8 +182,16 @@
 - **5.6 DebugUI：基于 Dear ImGui 的实体检视器** (~600)
   - rlImGui 桥接 raylib
   - 直接遍历 `pool<T>().raw_data() / raw_entity_data()` 实现零拷贝可视化
-  - 代码引用：`DebugUI/DebugUI.hpp`
-- *(预留 5.7) 动画系统、5.8 AI 系统 — 后续填入*
+  - 代码引用：`src/UI/ComponentUI.hpp`
+- **5.7 NPC AI 子系统：需求-情绪-决策-执行管线** (~1500)
+  - EventBus：FIFO 发布-订阅，确定性 Drain
+  - NeedComponent / EmotionComponent：动机与情绪状态基底
+  - AppraisalSystem：主观解读因子 + KnowledgeFact bitset 信息差
+  - DecisionSystem：Utility AI（效用 = 增益 × 需求紧迫度 × 情绪调制因子）
+  - ActionExecutionSystem：执行、satisfaction 补偿、发布完成事件
+  - LineSystem：34 条 LineDef catalog、softmax 采样、立场一致性 stance_factor
+  - 代码引用：`Systems/{EventSystem,AppraisalSystem,DecisionSystem,ActionExecutionSystem,LineSystem}.hpp`
+- *(预留 5.8) 动画系统 — 后续填入*
 
 ---
 
