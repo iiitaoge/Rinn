@@ -160,12 +160,6 @@ Entity 使用 32 位句柄表达：
 
 多组件查询会选择最小组件池作为驱动池，再检查实体是否同时拥有其他组件。这个策略减少了无效实体扫描，是当前 ECS 查询性能的核心优化点。
 
-## Documentation
-
-- [项目审查报告](docs/audit/Project_Audit.md)
-- [编辑器契约草案](docs/editor-contract.md)
-- [毕业论文主大纲](docs/thesis/00_outline.md)
-- [M6 涌现扩展规格](docs/m6-emergence-extension-spec.md)
 
 ## Roadmap
 
